@@ -16,7 +16,6 @@ from skimage.color import label2rgb  # Pretty display labeled images
 from skimage.morphology import remove_small_objects, remove_small_holes  # Clean up small objects or holes in our image
 import pandas as pd  # For creating our dataframe which we will use for filtering
 
-# Functions for candle analysis
 def prep_file(filename):
     # read in the file
     imstack = czifile.imread(filename)
@@ -90,8 +89,85 @@ def find_candles(max_projection, nrows, ncols):
     
     return df, Nobjects
 
-def identify_good_candles(imstack, df, Nobjects, intensity_minimum, volume_width=5, min_val=2500):
+
+def find_filter_values(imstack, df, Nobjects, volume_width=5):
     
+    # volume width variables
+    vw = volume_width
+    vwl = volume_width - 1
+    vwr = volume_width + 1
+    z = imstack.shape[0]
+
+    # Create empty holders for parameters
+    candle_volume = []
+    candle_sum_intensity = []
+    # Create variable for the different faces of the cube filter (top and bottom faces = z_bg, side faces = xy_bg)
+    z_bg = []
+    xy_bg = []
+    
+    # Loop through each cand and create a substack with a defined volume around it (change with volume_width definition)
+    # Get the intensities of the faces of the cube filter in order to empirically define a maximum intensity threshold for those faces for each data set
+    # The top/bottom and side slices are separated in this analysis because larger z stacks would likely mean that there is very 
+        # little background for the top and bottom z slice but the side slices likely have quite a bit (especially with an abberation)
+    for candle in np.arange(0,Nobjects):
+        #remove any candles that are on the edges of the image
+        if df.crows[candle] > vwl and df.crows[candle] < (nrows - vwr) and df.ccols[candle] > vwl and df.ccols[candle] < (ncols - vwr):
+            # create a substack around that local maxima with a defined volume
+            substack = imstack[:,df.crows[candle]-vw:df.crows[candle]+vwr,df.ccols[candle]-vw:df.ccols[candle]+vwr]
+            candle_volume.append(substack)
+            # Sum the intensity in that volume
+            candle_sum_intensity.append(np.sum(substack))
+
+            # pull the intensities of the top and bottom of the cube filter
+            z_bg_pts = np.zeros(2*substack.shape[1]*substack.shape[2])
+            z_bg_pts[0:(2*vw + 1)**2] = substack[0,:,:].ravel()
+            z_bg_pts[(2*vw + 1)**2:((2*vw + 1)**2)*2] = substack[-1,:,:].ravel()
+
+            # pull the intensities of the sides of the cube filter
+            xy_bg_pts = np.zeros(2*(substack.shape[0]-2)*(substack.shape[1]) \
+                                + 2*(substack.shape[0]-2)*(substack.shape[2]-2))
+            xy_bg_pts[0:((z-2)*(2*vw + 1))] = substack[1:-1,0,:].ravel()
+            xy_bg_pts[((z-2)*(2*vw + 1)):(2*(z-2)*(2*vw + 1))] \
+                = substack[1:-1,-1,:].ravel()
+            xy_bg_pts[(2*(z-2)*(2*vw + 1)):(2*(z-2)*(2*vw + 1) + (z-2)*(2*vw - 1))] \
+                = substack[1:-1,1:-1,0].ravel()
+            xy_bg_pts[(2*(z-2)*(2*vw + 1) + (z-2)*(2*vw - 1)): \
+                    (2*(z-2)*(2*vw + 1) + 2*(z-2)*(2*vw - 1))] \
+                = substack[1:-1,1:-1,-1].ravel()
+            # Add the sum intensity of these faces to their new variables
+            z_bg.append(np.sum(z_bg_pts))
+            xy_bg.append(np.sum(xy_bg_pts))
+        # If the candles were on the edge, their data values are set to zero (to keep the same shape for all variables)    
+        else:
+            candle_volume.append(0)
+            z_bg.append(0)
+            xy_bg.append(0)
+            
+    # Add columns to the dataframe
+    df['sum_intensity'] = candle_sum_intensity
+    df['volume'] = candle_volume
+    df['z_bg'] = z_bg
+    df['xy_bg'] = xy_bg
+
+    # Plot a histogram of the sum intensities of the top/bottom or side slices
+    z_bg_fig, z_bg_axes = plt.subplots()
+    z_bg_axes.hist(df.z_bg, bins = 150)
+    z_bg_axes.set_title('Sum Intensity of Top and Bottom Slices')
+    z_bg_fig.show()
+
+    xy_bg_fig, xy_bg_axes = plt.subplots()
+    xy_bg_axes.hist(df.xy_bg, bins = 150)
+    xy_bg_axes.set_title('Sum Intensity of Side Slices')
+    xy_bg_fig.show()
+
+    
+    return df, Nobjects
+
+def identify_good_candles(imstack, df, Nobjects, intensity_minimum, volume_width=5, z_face_max=2500, xy_face_max=5000):
+    
+    print(intensity_minimum)
+    print(volume_width)
+    print(min_val)
     # volume width variables
     vw = volume_width
     vwl = volume_width - 1
@@ -102,28 +178,20 @@ def identify_good_candles(imstack, df, Nobjects, intensity_minimum, volume_width
     candle_good_border = []
     candle_sum_intensity = []
     good_intensity = []
-    candle_volume = []
     bg = []
 
     # Loop through each candle
     for candle in np.arange(0,Nobjects):
         # Check that the candle isn't on the edge of the image
         if df.crows[candle] > vwl and df.crows[candle] < (nrows - vwr) and df.ccols[candle] > vwl and df.ccols[candle] < (ncols - vwr):
-            # select volume around the candle
-            substack = imstack[:,df.crows[candle]-vw:df.crows[candle]+vwr,df.ccols[candle]-vw:df.ccols[candle]+vwr]
-            candle_volume.append(substack)
-            # Sum the intensity in that volume
-            candle_sum_intensity.append(np.sum(substack))
             # if intensity is above a threshold value mark it as good
             if np.sum(substack) > intensity_minimum:
                 good_intensity.append(1)
             else:
                 good_intensity.append(0)
             # If the edges of the candle volume are below a threshold intensity, mark it as good
-            if np.sum(substack[0,:,:]) < min_val and np.sum(substack[-1,:,:]) < min_val \
-                and np.sum(substack[:,0,:]) < min_val and np.sum(substack[:,-1,:]) < min_val \
-                and np.sum(substack[:,:,0]) < min_val and np.sum(substack[:,:,-1]) < min_val:
-                    candle_good_border.append(1)
+            if z_bg < z_face_max and xy_bg < xy_face_max:
+                candle_good_border.append(1)
             else:
                 candle_good_border.append(0)
             
@@ -162,7 +230,7 @@ def identify_good_candles(imstack, df, Nobjects, intensity_minimum, volume_width
     
     # plot where the good candles are in the image
     good_overlay_fig, good_overlay_axes = plt.subplots()
-    good_overlay_axes.imshow(max_projection, cmap='Greys', vmin=50, vmax=800)
+    good_overlay_axes.imshow(max_projection, cmap='Greys', vmin=50, vmax=np.max(max_projection)*.4)
     good_overlay_axes.plot(good_candles_df.ccols, good_candles_df.crows,'x', color ='xkcd:bright purple')
     good_overlay_fig.show()
 
