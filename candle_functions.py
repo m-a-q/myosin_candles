@@ -1,6 +1,6 @@
 import numpy as np                 # This contains all our math functions we'll need
 import skimage.io as io            # This toolbox is what we'll use for reading and writing images 
-%matplotlib notebook 
+
 import matplotlib.pyplot as plt    # This toolbox is to create our plots. Line above makes them interactive
 import os                          # This toolbox is a useful directory tool to see what files we have in our folder
 import cv2                         # image processing toolbox
