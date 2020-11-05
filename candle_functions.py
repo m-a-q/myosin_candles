@@ -337,85 +337,53 @@ def filament_finder(good_maxima_df, micron_per_pixel=0.043):
     return good_maxima_df
 
 
-def good_filament_finder(good_maxima_df, gfp=1731):
-    unique_filaments = np.unique(good_maxima_df.filament)
-    good_filament = []
-    centroidrows = []
-    centroidcols = []
-    n_maxima = []
-    maxrows = []
-    maxcols = []
-    br = []
-    er = []
-    bc = []
-    ec = []
-    pad = 5
-    volume = []
-    intensity = []
-    bbox = []
-    gfp = 1731
-    ngfp = []
-    monomers = []
+def good_filament_finder(good_maxima_df, imstack, gfp=1731, pad = 5):
+ 
+    unique_filaments = good_maxima_df[good_maxima_df['filament'] != 0.].groupby('filament')
 
-    for ft in unique_filaments:
-        if ft > 0:
-            filament_df = good_maxima_df[good_maxima_df.filament == ft]
-            cr = (np.sum(filament_df.crows))/len(filament_df)
+    good_filament_df = pd.DataFrame(index = np.sort(good_maxima_df['filament'].unique())[1:])
 
-            cc = (np.sum(filament_df.ccols))/len(filament_df)
-            good_filament.append(ft)
-            centroidrows.append(cr)
-            centroidcols.append(cc)
-            n_maxima.append(len(filament_df))
-            cpts = []
-            rpts = []
-            for pt in filament_df.crows:
-                rpts.append(pt)
-            for pt in filament_df.ccols:
-                cpts.append(pt)
-            maxrows.append(rpts)
-            maxcols.append(cpts)
-            br.append(np.min(rpts)-pad)
-            er.append(np.max(rpts)+pad)
-            bc.append(np.min(cpts)-pad)
-            ec.append(np.max(cpts)+pad)
-            bbox.append(np.array([[np.min(cpts)-pad, np.min(rpts)-pad],
-                                  [np.min(cpts)-pad, np.max(rpts)+pad],
-                                  [np.max(cpts)+pad, np.max(rpts)+pad],
-                                  [np.max(cpts)+pad, np.min(rpts)-pad],
-                                  [np.min(cpts)-pad, np.min(rpts)-pad]]))
-            r = np.array([[2, 4], [6, 4], [6, 1], [2, 1]])
-            substack = imstack[:, np.min(
-                rpts)-pad:np.max(rpts)+pad+1, np.min(cpts)-pad:np.max(cpts)+pad+1]
-            volume.append(substack)
-            intensity.append(np.sum(substack))
-            ngfp.append(np.sum(substack)/gfp)
-            monomers.append((np.sum(substack)/gfp)/2)
+    good_filament_df['filament'] = np.sort(good_maxima_df['filament'].unique())[1:]
+    good_filament_df['n_maxima'] = unique_filaments.count()['labels']
+    good_filament_df[['centrows', 'centcols']] = unique_filaments.mean()[['crows', 'ccols']]
 
-  # Create a dictionary with data
-    good_filament_dict = {'filament': good_filament,
-                          'n_maxima': n_maxima,
-                          'intensity': intensity,
-                          'ngfp': ngfp,
-                          'monomers': monomers,
-                          'centrows': centroidrows,
-                          'centcols': centroidcols,
-                          'maxrows': maxrows,
-                          'maxcols': maxcols,
-                          'br': br,
-                          'er': er,
-                          'bc': bc,
-                          'ec': ec,
-                          'bbox': bbox,
-                          'volume': volume
-                          }
+    # find individual row and col position
+    maxrows, maxcols = [], []
+    for filaments in unique_filaments:
+        maxrows.append(filaments[1]['crows'].values)
+        maxcols.append(filaments[1]['ccols'].values)
+    good_filament_df['maxrows'] = maxrows
+    good_filament_df['maxcols'] = maxcols
 
-    # create a dataframe from the dictionary
-    good_filament_df = pd.DataFrame(good_filament_dict)
+    # Find surrounding box and volume
+    good_filament_df['br'] = (unique_filaments.min()['crows'] - pad)
+    good_filament_df['er'] = (unique_filaments.max()['crows'] + pad)
+    good_filament_df['bc'] = (unique_filaments.min()['ccols'] - pad)
+    good_filament_df['ec'] = (unique_filaments.max()['ccols'] + pad)
+
+    bboxs = []
+    volumes = []
+    for i, row in good_filament_df.iterrows():
+        bboxs.append(np.array([[row['bc'], row['br']],
+                                [row['bc'], row['er']],
+                                [row['ec'], row['er']],
+                                [row['ec'], row['br']],
+                                [row['bc'], row['br']]]))
+        volumes.append(imstack[:, int(row['br']):int(row['er'])+1, int(row['bc']):int(row['ec'])+1])
+    good_filament_df['bbox'] = bboxs
+    good_filament_df['volumes'] = volumes
+
+    # calculate intensity
+    good_filament_df['intensity'] = good_filament_df.loc[:, 'volumes'].apply(np.sum)
+    good_filament_df['ngfp'] = good_filament_df.loc[:, 'intensity'] / gfp
+    good_filament_df['monomers'] = good_filament_df.loc[:, 'intensity'] / gfp / 2
+
+    # Select filaments with 1 < N < 5 peaks
     good_filament_df = good_filament_df[good_filament_df.n_maxima > 1]
     good_filament_df = good_filament_df[good_filament_df.n_maxima < 5]
     good_filament_df = good_filament_df.reset_index(drop=True)
 
+    max_projection = np.amax(imstack, axis=0)
     cluster_fig, cluster_axes = plt.subplots()
     cluster_axes.imshow(max_projection, cmap='Greys', vmin=50, vmax=800)
 
