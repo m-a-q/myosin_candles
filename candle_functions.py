@@ -112,25 +112,15 @@ def identify_good_candles(imstack, df, Nobjects, intensity_minimum, volume_width
             else:
                 candle_good_border.append(0)
 
-            # pull the intensity values from the pixels around edge of the candle volume
-            edge_pts = np.zeros(2*substack.shape[1]*substack.shape[2]
-                                + 2*(substack.shape[0]-2)*(substack.shape[1])
-                                + 2*(substack.shape[0]-2)*(substack.shape[2]-2))
-            edge_pts[0:(2*vw + 1)**2] = substack[0, :, :].ravel()
-            edge_pts[(2*vw + 1)**2:((2*vw + 1)**2) *
-                     2] = substack[-1, :, :].ravel()
-            edge_pts[((2*vw + 1)**2)*2:(((2*vw + 1)**2)*2 + (z-2)
-                                        * (2*vw + 1))] = substack[1:-1, 0, :].ravel()
-            edge_pts[(((2*vw + 1)**2)*2 + (z-2)*(2*vw + 1)):(((2*vw + 1)**2)*2 + 2*(z-2)*(2*vw + 1))] \
-                = substack[1:-1, -1, :].ravel()
-            edge_pts[(((2*vw + 1)**2)*2 + 2*(z-2)*(2*vw + 1)):(((2*vw + 1)**2)*2 + 2*(z-2)*(2*vw + 1) + (z-2)*(2*vw - 1))] \
-                = substack[1:-1, 1:-1, 0].ravel()
-            edge_pts[(((2*vw + 1)**2)*2 + 2*(z-2)*(2*vw + 1) + (z-2)*(2*vw - 1)):
-                     (((2*vw + 1)**2)*2 + 2*(z-2)*(2*vw + 1) + 2*(z-2)*(2*vw - 1))] \
-                = substack[1:-1, 1:-1, -1].ravel()
+            # sum the intensity values from the pixels around edge of the candle volume
+            edge_mean = substack.copy()
+            edge_mean[1:-1, 1:-1, 1:-1] = 0
+            edge_mean = edge_mean.sum()
+            edge_mean /= 2*substack.shape[1]*substack.shape[2] \
+                         + 2*(substack.shape[0]-2)*(substack.shape[1]) \
+                         + 2*(substack.shape[0]-2)*(substack.shape[2]-2)
 
-            bg.append(np.mean(edge_pts) *
-                      substack.shape[0] * substack.shape[1] * substack.shape[2])
+            bg.append(edge_mean * substack.shape[0] * substack.shape[1] * substack.shape[2])
         else:
             candle_good_border.append(0)
             candle_sum_intensity.append(0)
