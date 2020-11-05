@@ -12,6 +12,7 @@ from mpl_toolkits import mplot3d   # for making a 3D surface plot
 import czifile                     # read in the czifile
 from scipy import stats
 from scipy import optimize, ndimage               # for curve fitting
+from scipy.signal import convolve   # Used to detect overlap
 from skimage.measure import label  # For labeling regions in thresholded images
 # For calculating properties of labeled regions
 from skimage.measure import regionprops
@@ -42,56 +43,32 @@ def prep_file(filename):
     return imstack, max_projection, nrows, ncols
 
 
-def find_candles(max_projection, nrows, ncols):
+def find_candles(max_projection, nrows, ncols, min_value=1000):
 
-    mask = np.zeros_like(max_projection)
-    for i in np.arange(1, nrows-1):
-        for j in np.arange(1, ncols-1):
-            if max_projection[i, j] > 1000:
-                if max_projection[i, j] > max_projection[i-1, j-1]:
-                    if max_projection[i, j] > max_projection[i-1, j]:
-                        if max_projection[i, j] > max_projection[i-1, j+1]:
-                            if max_projection[i, j] > max_projection[i, j-1]:
-                                if max_projection[i, j] > max_projection[i, j+1]:
-                                    if max_projection[i, j] > max_projection[i+1, j-1]:
-                                        if max_projection[i, j] > max_projection[i+1, j]:
-                                            if max_projection[i, j] > max_projection[i+1, j+1]:
-                                                mask[i, j] = 1
+    # Create a mask to hold local peaks
+    mask = (max_projection == ndimage.maximum_filter(
+        max_projection, size=3, mode='constant'))
+    mask = np.logical_and(mask, max_projection > min_value)
+    mask = mask.astype(int)
+
+    # Location of the peaks
+    peak_coords = np.stack(np.where(mask), axis=1)
+
     # Find the number of total peaks
     Nobjects = np.sum(mask.ravel())
     print('Found %d Objects' % (Nobjects))
 
-    # label individual peaks
-    label_mask = label(mask)
-    # get properties of each peak
-    candle_props = regionprops(label_mask, max_projection)
-
-    # create empty holders for properties of interest
-    candle_ids = []
-    candle_centroid_rows = []
-    candle_centroid_cols = []
-    candle_intensity = []
-
-    # extract properties from each peak
-    for candle in candle_props:
-        candle_ids.append(candle.label)
-        row, col = candle.centroid
-        candle_centroid_rows.append(row.astype('int'))
-        candle_centroid_cols.append(col.astype('int'))
-        candle_intensity.append(candle.max_intensity)
-
-    # Create a dictionary with data
-    data_dict = {'labels': candle_ids,
-                 'crows': candle_centroid_rows,
-                 'ccols': candle_centroid_cols,
-                 'intensity': candle_intensity}
+    data_dict = {'labels': np.arange(len(peak_coords)).astype(int),
+                 'crows': peak_coords[:, 0],
+                 'ccols': peak_coords[:, 1],
+                 'intensity': max_projection[peak_coords[:, 0], peak_coords[:, 1]]}
 
     # create a dataframe from the dictionary
     df = pd.DataFrame(data_dict)
 
     overlay_fig, overlay_axes = plt.subplots()
     overlay_axes.imshow(max_projection, cmap='Greys', vmin=50, vmax=800)
-    overlay_axes.plot(df.ccols, df.crows, 'xr')
+    overlay_axes.plot(peak_coords[:, 1], peak_coords[:, 0], 'xr')
     overlay_fig.show()
 
     return df, Nobjects
