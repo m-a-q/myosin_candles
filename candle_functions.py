@@ -1,6 +1,6 @@
 import numpy as np                 # This contains all our math functions we'll need
 import skimage.io as io            # This toolbox is what we'll use for reading and writing images 
-%matplotlib notebook 
+# %matplotlib notebook 
 import matplotlib.pyplot as plt    # This toolbox is to create our plots. Line above makes them interactive
 import os                          # This toolbox is a useful directory tool to see what files we have in our folder
 import cv2                         # image processing toolbox
@@ -295,3 +295,138 @@ def fit_allcandles_distribution(all_data_60, all_data_120):
     candle_calibration_fig.savefig('all_data_calibration.eps', dpi=150)
    
     return params60, params120
+
+    
+def filament_finder(good_maxima_df, micron_per_pixel = 0.043):
+    #nm2_filament = []
+    nearest_neighbors = []
+    nmaxima = len(good_maxima_df.ccols)
+    all_maxima_col = good_maxima_df['ccols'].values
+    all_maxima_row = good_maxima_df['crows'].values
+    for maxima in np.arange(0,nmaxima):
+            single_maxima_col = np.ones(nmaxima) * good_maxima_df['ccols'].values[maxima]
+            single_maxima_row = np.ones(nmaxima) * good_maxima_df['crows'].values[maxima]
+            distance = np.sqrt((single_maxima_col - all_maxima_col)**2 + (single_maxima_row - all_maxima_row)**2)
+            distance = distance*micron_per_pixel
+            distance_condition = (distance > 0.1) & (distance < 0.5)
+            potential_neighbors = np.where(distance_condition==1)[0]
+            nearest_neighbors.append(potential_neighbors)
+    good_maxima_df['neighbors'] = nearest_neighbors
+    good_maxima_df = good_maxima_df.reset_index(drop= True)    
+    #good_maxima_df['filament'] = nm2_filament
+    good_maxima_df.head(10)
+    filament = np.zeros(nmaxima)
+    filament_number = 1
+    for point in np.arange(0,nmaxima):
+        point_neighbors = good_maxima_df.neighbors[point]
+        point_neighbors = np.hstack((point_neighbors, point))
+        neighbor_neighbors = []
+    #print(point_neighbors)
+        for pt in point_neighbors:
+            neighbors_temp = good_maxima_df.neighbors[pt]
+            for pt2 in neighbors_temp:
+                neighbor_neighbors.append(pt2)
+        neighbor_neighbors = np.unique(neighbor_neighbors)
+    #print(neighbor_neighbors)
+        if neighbor_neighbors.size > 0:
+            if (point_neighbors.all() == neighbor_neighbors.all()):
+                #print('Identical!')
+                for pt in neighbor_neighbors:
+                    filament[pt] = filament_number
+                filament_number += 1
+                
+    good_maxima_df['filament'] = filament
+    
+   
+
+    return good_maxima_df
+
+
+
+def good_filament_finder(good_maxima_df, gfp = 1731):
+    unique_filaments = np.unique(good_maxima_df.filament)
+    good_filament = []
+    centroidrows = []
+    centroidcols = []
+    n_maxima = []
+    maxrows = []
+    maxcols = []
+    br = [] 
+    er = [] 
+    bc = [] 
+    ec = []
+    pad = 5
+    volume = []
+    intensity = []
+    bbox = []
+    gfp = 1731
+    ngfp = []
+    monomers = []
+
+    for ft in unique_filaments:
+        if ft > 0:
+            filament_df = good_maxima_df[good_maxima_df.filament == ft]
+            cr = (np.sum(filament_df.crows))/len(filament_df)
+        
+            cc = (np.sum(filament_df.ccols))/len(filament_df)
+            good_filament.append(ft)
+            centroidrows.append(cr)
+            centroidcols.append(cc)
+            n_maxima.append(len(filament_df))
+            cpts = []
+            rpts = []
+            for pt in filament_df.crows:
+                rpts.append(pt)
+            for pt in filament_df.ccols:
+                cpts.append(pt)
+            maxrows.append(rpts)
+            maxcols.append(cpts)
+            br.append(np.min(rpts)-pad)
+            er.append(np.max(rpts)+pad)
+            bc.append(np.min(cpts)-pad)
+            ec.append(np.max(cpts)+pad)
+            bbox.append(np.array([[np.min(cpts)-pad,np.min(rpts)-pad], \
+                              [np.min(cpts)-pad,np.max(rpts)+pad], \
+                              [np.max(cpts)+pad,np.max(rpts)+pad], \
+                              [np.max(cpts)+pad,np.min(rpts)-pad], \
+                              [np.min(cpts)-pad,np.min(rpts)-pad]]))
+            r = np.array([[2,4],[6,4],[6,1],[2,1]])
+            substack = imstack[:,np.min(rpts)-pad:np.max(rpts)+pad+1,np.min(cpts)-pad:np.max(cpts)+pad+1]
+            volume.append(substack)
+            intensity.append(np.sum(substack))
+            ngfp.append(np.sum(substack)/gfp)
+            monomers.append((np.sum(substack)/gfp)/2)
+        
+  # Create a dictionary with data
+    good_filament_dict = {'filament': good_filament,
+            'n_maxima': n_maxima,
+            'intensity': intensity,
+            'ngfp': ngfp,
+            'monomers': monomers,
+            'centrows': centroidrows,
+            'centcols': centroidcols,
+            'maxrows': maxrows,
+            'maxcols': maxcols,
+            'br': br,
+            'er': er,
+            'bc': bc,
+            'ec': ec,
+            'bbox': bbox,
+            'volume': volume
+                     }
+    
+    # create a dataframe from the dictionary
+    good_filament_df = pd.DataFrame(good_filament_dict)
+    good_filament_df = good_filament_df[good_filament_df.n_maxima > 1]
+    good_filament_df = good_filament_df[good_filament_df.n_maxima < 5]
+    good_filament_df = good_filament_df.reset_index(drop= True)
+    
+    cluster_fig, cluster_axes = plt.subplots()
+    cluster_axes.imshow(max_projection, cmap='Greys', vmin=50, vmax=800)
+
+    for filament in np.arange(0,len(good_filament_df)):
+        cluster_axes.plot(good_filament_df.maxcols[filament], good_filament_df.maxrows[filament], color = 'xkcd:lightish blue', marker='o')
+        cluster_axes.plot(good_filament_df.bbox[filament][:,0], good_filament_df.bbox[filament][:,1], color = 'xkcd:bright purple')
+    cluster_fig.show()
+    
+    return good_filament_df
