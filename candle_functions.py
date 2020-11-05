@@ -369,7 +369,9 @@ def good_filament_finder(good_maxima_df, imstack, gfp=1731, pad = 5):
                                 [row['ec'], row['er']],
                                 [row['ec'], row['br']],
                                 [row['bc'], row['br']]]))
-        volumes.append(imstack[:, int(row['br']):int(row['er'])+1, int(row['bc']):int(row['ec'])+1])
+        volumes.append(imstack[:, 
+                               int(row['br']):int(row['er'])+1, 
+                               int(row['bc']):int(row['ec'])+1])
     good_filament_df['bbox'] = bboxs
     good_filament_df['volumes'] = volumes
 
@@ -388,10 +390,12 @@ def good_filament_finder(good_maxima_df, imstack, gfp=1731, pad = 5):
     cluster_axes.imshow(max_projection, cmap='Greys', vmin=50, vmax=800)
 
     for filament in np.arange(0, len(good_filament_df)):
-        cluster_axes.plot(
-            good_filament_df.maxcols[filament], good_filament_df.maxrows[filament], color='xkcd:lightish blue', marker='o')
+        cluster_axes.plot(good_filament_df.maxcols[filament],
+                          good_filament_df.maxrows[filament],
+                          color='xkcd:lightish blue', marker='o')
         cluster_axes.plot(good_filament_df.bbox[filament][:, 0],
-                          good_filament_df.bbox[filament][:, 1], color='xkcd:bright purple')
+                          good_filament_df.bbox[filament][:, 1], 
+                          color='xkcd:bright purple')
     cluster_fig.show()
 
     return good_filament_df
