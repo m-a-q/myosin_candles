@@ -13,6 +13,7 @@ import czifile                     # read in the czifile
 from scipy import stats
 from scipy import optimize, ndimage               # for curve fitting
 from scipy.signal import convolve   # Used to detect overlap
+from scipy.spatial.distance import pdist, squareform
 from skimage.measure import label  # For labeling regions in thresholded images
 # For calculating properties of labeled regions
 from skimage.measure import regionprops
@@ -300,47 +301,38 @@ def fit_allcandles_distribution(all_data_60, all_data_120):
 
 
 def filament_finder(good_maxima_df, micron_per_pixel=0.043):
-    #nm2_filament = []
-    nearest_neighbors = []
-    nmaxima = len(good_maxima_df.ccols)
-    all_maxima_col = good_maxima_df['ccols'].values
-    all_maxima_row = good_maxima_df['crows'].values
-    for maxima in np.arange(0, nmaxima):
-        single_maxima_col = np.ones(
-            nmaxima) * good_maxima_df['ccols'].values[maxima]
-        single_maxima_row = np.ones(
-            nmaxima) * good_maxima_df['crows'].values[maxima]
-        distance = np.sqrt((single_maxima_col - all_maxima_col)
-                           ** 2 + (single_maxima_row - all_maxima_row)**2)
-        distance = distance*micron_per_pixel
-        distance_condition = (distance > 0.1) & (distance < 0.5)
-        potential_neighbors = np.where(distance_condition == 1)[0]
-        nearest_neighbors.append(potential_neighbors)
-    good_maxima_df['neighbors'] = nearest_neighbors
-    good_maxima_df = good_maxima_df.reset_index(drop=True)
-    #good_maxima_df['filament'] = nm2_filament
-    good_maxima_df.head(10)
-    filament = np.zeros(nmaxima)
-    filament_number = 1
-    for point in np.arange(0, nmaxima):
-        point_neighbors = good_maxima_df.neighbors[point]
-        point_neighbors = np.hstack((point_neighbors, point))
-        neighbor_neighbors = []
-    # print(point_neighbors)
-        for pt in point_neighbors:
-            neighbors_temp = good_maxima_df.neighbors[pt]
-            for pt2 in neighbors_temp:
-                neighbor_neighbors.append(pt2)
-        neighbor_neighbors = np.unique(neighbor_neighbors)
-    # print(neighbor_neighbors)
-        if neighbor_neighbors.size > 0:
-            if (point_neighbors.all() == neighbor_neighbors.all()):
-                # print('Identical!')
-                for pt in neighbor_neighbors:
-                    filament[pt] = filament_number
-                filament_number += 1
+    
+    # calculate pairwise distance between points
+    pair_dist = squareform(pdist(good_maxima_df[['crows', 'ccols']])).shape
+    pair_dist *= micron_per_pixel
 
-    good_maxima_df['filament'] = filament
+    # potential neighbors are within 0.1 and 0.5
+    potential_neighbors = np.logical_and(0.1 < pair_dist, pair_dist < 0.5)
+
+    neighbors = []
+    for i in range(len(good_maxima_df)):
+        neighbors.append(np.where(potential_neighbors[i])[0])
+    good_maxima_df['neighbors'] = neighbors
+
+    good_maxima_df = good_maxima_df.reset_index(drop=True)
+
+    def set_filament(df, label, filament_nr):
+        '''Helper function to iteratively set filament number of label and neighbors'''
+        if df.loc[label, 'filament'] == 0:
+            df.loc[label, 'filament'] = filament_nr
+
+            for neighbor in df.loc[label, 'neighbors']:
+                set_filament(df, neighbor, filament_nr)
+
+    # select all points with neighbors
+    filament_labels = good_maxima_df[good_maxima_df['neighbors'].apply(len) > 0].labels
+    good_maxima_df['filament'] = 0
+    
+    filament_nr = 1
+    for label in filament_labels:
+        if good_maxima_df.loc[label, 'filament'] == 0:
+            set_filament(good_maxima_df, label, filament_nr)
+            filament_nr += 1
 
     return good_maxima_df
 
