@@ -75,7 +75,8 @@ def find_candles(max_projection, nrows, ncols, min_value=1000):
     return df, Nobjects
 
 
-def identify_good_candles(imstack, df, Nobjects, intensity_minimum, volume_width=5, min_val=2500):
+def identify_good_candles(imstack, df, Nobjects, intensity_minimum, 
+                          volume_width=5, min_val=2500, filename=None):
 
     # volume width variables
     vw = volume_width
@@ -89,6 +90,9 @@ def identify_good_candles(imstack, df, Nobjects, intensity_minimum, volume_width
     good_intensity = []
     candle_volume = []
     bg = []
+
+    max_projection = np.amax(imstack, axis=0)
+    nrows, ncols = max_projection.shape
 
     # Loop through each candle
     for candle in np.arange(0, Nobjects):
@@ -154,7 +158,8 @@ def identify_good_candles(imstack, df, Nobjects, intensity_minimum, volume_width
     hist_inten_axes.set_xlabel('Candle Intensity')
     hist_inten_axes.set_ylim(0, 40)
     hist_inten_axes.set_ylabel('Counts')
-    hist_inten_axes.set_title(filename)
+    if filename is not None:
+        hist_inten_axes.set_title(filename)
     hist_inten_fig.show()
 
     # plot histograms of bg values
@@ -178,7 +183,7 @@ def gaussian_fit(x, A, B, C):
     return A * np.exp(-1/2 * ((x - B) / C) ** 2)
 
 
-def fit_candle_distribution(good_candles_df, candle_size):
+def fit_candle_distribution(good_candles_df, candle_size, filename):
     # make a histogram of the intensities
     counts, bins = np.histogram(
         good_candles_df.sum_intensity - good_candles_df.bg, bins=150)
@@ -218,7 +223,7 @@ def fit_candle_distribution(good_candles_df, candle_size):
     return params
 
 
-def save_candle_intensity(good_candles_df):
+def save_candle_intensity(good_candles_df, filename):
     output = np.array((good_candles_df.sum_intensity, good_candles_df.bg))
     # save the output array to a text file
     np.savetxt(filename[:-4] + '_data.txt',
