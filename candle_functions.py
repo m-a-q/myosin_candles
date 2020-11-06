@@ -24,9 +24,8 @@ from skimage.color import label2rgb  # Pretty display labeled images
 from skimage.morphology import remove_small_objects, remove_small_holes
 import pandas as pd  # For creating our dataframe which we will use for filtering
 
+
 # Functions for candle analysis
-
-
 def prep_file(filename):
     # read in the file
     imstack = czifile.imread(filename)
@@ -46,9 +45,8 @@ def prep_file(filename):
 
 def find_candles(max_projection, nrows, ncols, min_value=1000):
 
-    # Create a mask to hold local peaks
-    mask = (max_projection == ndimage.maximum_filter(
-        max_projection, size=3, mode='constant'))
+    # Create a mask of pixels which are local maxima and exceed min_value
+    mask = (max_projection == ndimage.maximum_filter(max_projection, size=3, mode='constant'))
     mask = np.logical_and(mask, max_projection > min_value)
     mask = mask.astype(int)
 
@@ -59,14 +57,14 @@ def find_candles(max_projection, nrows, ncols, min_value=1000):
     Nobjects = np.sum(mask.ravel())
     print('Found %d Objects' % (Nobjects))
 
+    # create a DataFrame for the peaks
     data_dict = {'labels': np.arange(len(peak_coords)).astype(int),
                  'crows': peak_coords[:, 0],
                  'ccols': peak_coords[:, 1],
                  'intensity': max_projection[peak_coords[:, 0], peak_coords[:, 1]]}
-
-    # create a dataframe from the dictionary
     df = pd.DataFrame(data_dict)
 
+    # Plot results
     overlay_fig, overlay_axes = plt.subplots()
     overlay_axes.imshow(max_projection, cmap='Greys', vmin=50, vmax=800)
     overlay_axes.plot(peak_coords[:, 1], peak_coords[:, 0], 'xr')
@@ -117,7 +115,7 @@ def identify_good_candles(imstack, df, Nobjects, intensity_minimum,
             else:
                 candle_good_border.append(0)
 
-            # sum the intensity values from the pixels around edge of the candle volume
+            # sum the intensity values from the edge-pixels of the candle volume
             edge_mean = substack.copy()
             edge_mean[1:-1, 1:-1, 1:-1] = 0
             edge_mean = edge_mean.sum()
@@ -170,23 +168,21 @@ def identify_good_candles(imstack, df, Nobjects, intensity_minimum,
 
     return good_candles_df
 
+
 # Fit a double gaussian curve
+def doublegaussian_fit(x, amp, x0, sig, amp_2, x0_2, sig_2):
+    return amp * np.exp(-1/2 * ((x - x0) / sig) ** 2) + \
+           amp_2 * np.exp(-1/2 * ((x - x0_2) / sig_2) ** 2)
 
-
-def doublegaussian_fit(x, A, B, C, D, E, F):
-    return A * np.exp(-1/2 * ((x - B) / C) ** 2) + D * np.exp(-1/2 * ((x - E) / F) ** 2)
 
 # Fit a gaussian curve
-
-
-def gaussian_fit(x, A, B, C):
-    return A * np.exp(-1/2 * ((x - B) / C) ** 2)
+def gaussian_fit(x, amp, x0, sig):
+    return amp * np.exp(-1/2 * ((x - x0) / sig) ** 2)
 
 
 def fit_candle_distribution(good_candles_df, candle_size, filename):
     # make a histogram of the intensities
-    counts, bins = np.histogram(
-        good_candles_df.sum_intensity - good_candles_df.bg, bins=150)
+    counts, bins = np.histogram(good_candles_df.sum_intensity - good_candles_df.bg, bins=150)
 
     # This gets the center of the bin instead of the edges
     bins = bins[:-1] + np.diff(bins/2)
@@ -209,8 +205,7 @@ def fit_candle_distribution(good_candles_df, candle_size, filename):
     distribution_fit_fig, distribution_fit_axes = plt.subplots()
     distribution_fit_axes.plot(bins, counts, '-ok')
     distribution_fit_axes.plot(bins, bg_fit, '-r')
-    distribution_fit_axes.set_xlabel(
-        'Summed Intensity Candle - Background Subtracted')
+    distribution_fit_axes.set_xlabel('Summed Intensity Candle - Background Subtracted')
     distribution_fit_axes.set_ylabel('Counts')
     distribution_fit_axes.set_title(filename)
     distribution_fit_axes.text(0.95, 0.95, 'Average Value \nof a GFP fluorophore:\n' + str(np.round(params[1]/candle_size)),
@@ -262,14 +257,11 @@ def fit_allcandles_distribution(all_data_60, all_data_120):
 
     # Plot result
     all_distribution_fit_fig, all_distribution_fit_axes = plt.subplots()
-    all_distribution_fit_axes.hist(
-        all_data_60[:, 0] - all_data_60[:, 1], bins=150, color="navy")
+    all_distribution_fit_axes.hist(all_data_60[:, 0] - all_data_60[:, 1], bins=150, color="navy")
     all_distribution_fit_axes.plot(bins60, bg_fit60, '-k')
-    all_distribution_fit_axes.hist(
-        all_data_120[:, 0] - all_data_120[:, 1], bins=150, color="purple")
+    all_distribution_fit_axes.hist(all_data_120[:, 0] - all_data_120[:, 1], bins=150, color="purple")
     all_distribution_fit_axes.plot(bins120, bg_fit120, '-k')
-    all_distribution_fit_axes.set_xlabel(
-        'Summed Intensity Candle - Background Subtracted')
+    all_distribution_fit_axes.set_xlabel('Summed Intensity Candle - Background Subtracted')
     all_distribution_fit_axes.set_ylabel('Counts')
     all_distribution_fit_axes.set_title('Combined Data')
     # all_distribution_fit_axes.text(0.95, 0.95, 'Average Value \nof a GFP fluorophore:\n' + str(np.round(params[1]/candle_size)),
@@ -288,7 +280,7 @@ def fit_allcandles_distribution(all_data_60, all_data_120):
     line = slope*x+intercept
 
     candle_calibration_fig, candle_calibration_axes = plt.subplots()
-    candle_calibration_axes.errorbar(x, y, yerr=yerr, ecolor='purple', fmt='s')
+    candle_calibration_axes.errorbar(x, y, yerr=yerr, max_color='purple', fmt='s')
     candle_calibration_axes.plot(x, line, 'k')
     candle_calibration_axes.set_title(
         'Candle Calibration\n' + 'y = ' + str(np.round(slope)) + 'X + ' + str(np.round(intercept)))
@@ -308,18 +300,25 @@ def fit_allcandles_distribution(all_data_60, all_data_120):
 def filament_finder(good_maxima_df, micron_per_pixel=0.043):
     
     # calculate pairwise distance between points
-    pair_dist = squareform(pdist(good_maxima_df[['crows', 'ccols']])).shape
-    pair_dist *= micron_per_pixel
+    pairwise_distances = squareform(pdist(good_maxima_df[['crows', 'ccols']])).shape
+    pairwise_distances *= micron_per_pixel
 
     # potential neighbors are within 0.1 and 0.5
-    potential_neighbors = np.logical_and(0.1 < pair_dist, pair_dist < 0.5)
+    neighbor_condition = np.logical_and(0.1 < pairwise_distances, pairwise_distances < 0.5)
 
+    # assign neighbors
     neighbors = []
     for i in range(len(good_maxima_df)):
-        neighbors.append(np.where(potential_neighbors[i])[0])
+        neighbors.append(np.where(neighbor_condition[i])[0])
     good_maxima_df['neighbors'] = neighbors
 
+    # select all peaks with neighbors
     good_maxima_df = good_maxima_df.reset_index(drop=True)
+    peak_labels = good_maxima_df[good_maxima_df['neighbors'].apply(len) > 0].labels
+    
+    # Assign labels to the individual filaments by iterating over the points and 
+    # their respective neighbors
+    good_maxima_df['filament'] = 0
 
     def set_filament(df, label, filament_nr):
         '''Helper function to iteratively set filament number of label and neighbors'''
@@ -328,55 +327,60 @@ def filament_finder(good_maxima_df, micron_per_pixel=0.043):
 
             for neighbor in df.loc[label, 'neighbors']:
                 set_filament(df, neighbor, filament_nr)
-
-    # select all points with neighbors
-    filament_labels = good_maxima_df[good_maxima_df['neighbors'].apply(len) > 0].labels
-    good_maxima_df['filament'] = 0
     
-    filament_nr = 1
-    for label in filament_labels:
+    filament_nr = 0
+    for label in peak_labels:
         if good_maxima_df.loc[label, 'filament'] == 0:
-            set_filament(good_maxima_df, label, filament_nr)
             filament_nr += 1
+            set_filament(good_maxima_df, label, filament_nr)
+
+    print(f'Found {filament_nr} individual filaments')
 
     return good_maxima_df
 
 
 def good_filament_finder(good_maxima_df, imstack, gfp=1731, pad = 5):
  
+    # Group good_maxima_df by the individual filament labels
     unique_filaments = good_maxima_df[good_maxima_df['filament'] != 0.].groupby('filament')
 
+    # Create DataFrame for restults
     good_filament_df = pd.DataFrame(index = np.sort(good_maxima_df['filament'].unique())[1:])
 
     good_filament_df['filament'] = np.sort(good_maxima_df['filament'].unique())[1:]
     good_filament_df['n_maxima'] = unique_filaments.count()['labels']
     good_filament_df[['centrows', 'centcols']] = unique_filaments.mean()[['crows', 'ccols']]
 
-    # find individual row and col position
+    # Select filaments with 1 < N < 5 peaks
+    good_filament_df = good_filament_df[good_filament_df.n_maxima > 1]
+    good_filament_df = good_filament_df[good_filament_df.n_maxima < 5]
+    good_filament_df = good_filament_df.reset_index(drop=True)
+
+    # find individual row and col position of peaks
     maxrows, maxcols = [], []
-    for filaments in unique_filaments:
-        maxrows.append(filaments[1]['crows'].values)
-        maxcols.append(filaments[1]['ccols'].values)
+    for i, filament in unique_filaments:
+        maxrows.append(filament['crows'].values)
+        maxcols.append(filament['ccols'].values)
     good_filament_df['maxrows'] = maxrows
     good_filament_df['maxcols'] = maxcols
 
-    # Find surrounding box and volume
-    good_filament_df['br'] = (unique_filaments.min()['crows'] - pad)
-    good_filament_df['er'] = (unique_filaments.max()['crows'] + pad)
-    good_filament_df['bc'] = (unique_filaments.min()['ccols'] - pad)
-    good_filament_df['ec'] = (unique_filaments.max()['ccols'] + pad)
+    # Find edge points, surrounding box and volume
+    good_filament_df['min_row'] = (unique_filaments.min()['crows'] - pad)
+    good_filament_df['max_row'] = (unique_filaments.max()['crows'] + pad)
+    good_filament_df['min_col'] = (unique_filaments.min()['ccols'] - pad)
+    good_filament_df['max_col'] = (unique_filaments.max()['ccols'] + pad)
 
     bboxs = []
     volumes = []
-    for i, row in good_filament_df.iterrows():
-        bboxs.append(np.array([[row['bc'], row['br']],
-                                [row['bc'], row['er']],
-                                [row['ec'], row['er']],
-                                [row['ec'], row['br']],
-                                [row['bc'], row['br']]]))
+    for i, filament in good_filament_df.iterrows():
+        bboxs.append(np.array([[filament['min_col'], filament['min_row']],
+                               [filament['min_col'], filament['max_row']],
+                               [filament['max_col'], filament['max_row']],
+                               [filament['max_col'], filament['min_row']],
+                               [filament['min_col'], filament['min_row']]]))
         volumes.append(imstack[:, 
-                               int(row['br']):int(row['er'])+1, 
-                               int(row['bc']):int(row['ec'])+1])
+                               int(filament['min_row']):int(filament['max_row'])+1, 
+                               int(filament['min_col']):int(filament['max_col'])+1])
     good_filament_df['bbox'] = bboxs
     good_filament_df['volumes'] = volumes
 
@@ -385,21 +389,17 @@ def good_filament_finder(good_maxima_df, imstack, gfp=1731, pad = 5):
     good_filament_df['ngfp'] = good_filament_df.loc[:, 'intensity'] / gfp
     good_filament_df['monomers'] = good_filament_df.loc[:, 'intensity'] / gfp / 2
 
-    # Select filaments with 1 < N < 5 peaks
-    good_filament_df = good_filament_df[good_filament_df.n_maxima > 1]
-    good_filament_df = good_filament_df[good_filament_df.n_maxima < 5]
-    good_filament_df = good_filament_df.reset_index(drop=True)
-
+    # Plot results
     max_projection = np.amax(imstack, axis=0)
     cluster_fig, cluster_axes = plt.subplots()
     cluster_axes.imshow(max_projection, cmap='Greys', vmin=50, vmax=800)
 
-    for filament in np.arange(0, len(good_filament_df)):
-        cluster_axes.plot(good_filament_df.maxcols[filament],
-                          good_filament_df.maxrows[filament],
+    for i, filament in good_filament_df.iterrows():
+        cluster_axes.plot(filament['maxcols'],
+                          filament['maxrows'],
                           color='xkcd:lightish blue', marker='o')
-        cluster_axes.plot(good_filament_df.bbox[filament][:, 0],
-                          good_filament_df.bbox[filament][:, 1], 
+        cluster_axes.plot(filament['bbox'][:, 0],
+                          filament['bbox'][:, 1], 
                           color='xkcd:bright purple')
     cluster_fig.show()
 
