@@ -22,6 +22,7 @@ from skimage.segmentation import clear_border
 from skimage.color import label2rgb  # Pretty display labeled images
 # Clean up small objects or holes in our image
 from skimage.morphology import remove_small_objects, remove_small_holes
+from skimage.feature import peak_local_max
 import pandas as pd  # For creating our dataframe which we will use for filtering
 
 
@@ -43,18 +44,15 @@ def prep_file(filename):
     return imstack, max_projection, nrows, ncols
 
 
-def find_candles(max_projection, nrows, ncols, min_value=1000):
+def find_candles(max_projection, min_value=1000):
 
-    # Create a mask of pixels which are local maxima and exceed min_value
-    mask = (max_projection == ndimage.maximum_filter(max_projection, size=3, mode='constant'))
-    mask = np.logical_and(mask, max_projection > min_value)
-    mask = mask.astype(int)
-
-    # Location of the peaks
-    peak_coords = np.stack(np.where(mask), axis=1)
+    # Function returns local maxim
+    peak_coords = peak_local_max(max_projection,
+                                 min_distance=3,
+                                 threshold_abs=min_value)
 
     # Find the number of total peaks
-    Nobjects = np.sum(mask.ravel())
+    Nobjects = len(peak_coords)
     print('Found %d Objects' % (Nobjects))
 
     # create a DataFrame for the peaks
@@ -97,8 +95,8 @@ def identify_good_candles(imstack, df, Nobjects, intensity_minimum,
         # Check that the candle isn't on the edge of the image
         if df.crows[candle] > vwl and df.crows[candle] < (nrows - vwr) and df.ccols[candle] > vwl and df.ccols[candle] < (ncols - vwr):
             # select volume around the candle
-            substack = imstack[:, df.crows[candle]-vw:df.crows[candle] +
-                               vwr, df.ccols[candle]-vw:df.ccols[candle]+vwr]
+            substack = imstack[:, df.crows[candle]-vw:df.crows[candle] + vwr,
+                               df.ccols[candle]-vw:df.ccols[candle]+vwr]
             candle_volume.append(substack)
             # Sum the intensity in that volume
             candle_sum_intensity.append(np.sum(substack))
@@ -119,10 +117,9 @@ def identify_good_candles(imstack, df, Nobjects, intensity_minimum,
             edge_mean = substack.copy()
             edge_mean[1:-1, 1:-1, 1:-1] = 0
             edge_mean = edge_mean.sum()
-            edge_mean /= 2*substack.shape[1]*substack.shape[2] \
-                         + 2*(substack.shape[0]-2)*(substack.shape[1]) \
-                         + 2*(substack.shape[0]-2)*(substack.shape[2]-2)
-
+            edge_mean = edge_mean / (2*substack.shape[1]*substack.shape[2]
+                                    + 2*(substack.shape[0]-2)*(substack.shape[1])
+                                    + 2*(substack.shape[0]-2)*(substack.shape[2]-2))
             bg.append(edge_mean * substack.shape[0] * substack.shape[1] * substack.shape[2])
         else:
             candle_good_border.append(0)
@@ -300,10 +297,10 @@ def fit_allcandles_distribution(all_data_60, all_data_120):
 def filament_finder(good_maxima_df, micron_per_pixel=0.043):
     
     # calculate pairwise distance between points
-    pairwise_distances = squareform(pdist(good_maxima_df[['crows', 'ccols']])).shape
+    pairwise_distances = squareform(pdist(good_maxima_df[['crows', 'ccols']]))
     pairwise_distances *= micron_per_pixel
 
-    # potential neighbors are within 0.1 and 0.5
+    # potential neighbors are within 0.1 and 0.5 micron
     neighbor_condition = np.logical_and(0.1 < pairwise_distances, pairwise_distances < 0.5)
 
     # assign neighbors
@@ -316,23 +313,22 @@ def filament_finder(good_maxima_df, micron_per_pixel=0.043):
     good_maxima_df = good_maxima_df.reset_index(drop=True)
     peak_labels = good_maxima_df[good_maxima_df['neighbors'].apply(len) > 0].labels
     
-    # Assign labels to the individual filaments by iterating over the points and 
-    # their respective neighbors
+    # Assign labels to the individual filaments by iterating over the points and their respective neighbors
     good_maxima_df['filament'] = 0
 
-    def set_filament(df, label, filament_nr):
+    def set_filament_iteratively(df, label, filament_nr):
         '''Helper function to iteratively set filament number of label and neighbors'''
         if df.loc[label, 'filament'] == 0:
             df.loc[label, 'filament'] = filament_nr
 
             for neighbor in df.loc[label, 'neighbors']:
-                set_filament(df, neighbor, filament_nr)
+                set_filament_iteratively(df, neighbor, filament_nr)
     
     filament_nr = 0
     for label in peak_labels:
         if good_maxima_df.loc[label, 'filament'] == 0:
             filament_nr += 1
-            set_filament(good_maxima_df, label, filament_nr)
+            set_filament_iteratively(good_maxima_df, label, filament_nr)
 
     print(f'Found {filament_nr} individual filaments')
 
@@ -344,19 +340,15 @@ def good_filament_finder(good_maxima_df, imstack, gfp=1731, pad = 5):
     # Group good_maxima_df by the individual filament labels
     unique_filaments = good_maxima_df[good_maxima_df['filament'] != 0.].groupby('filament')
 
-    # Create DataFrame for restults
+    # Create DataFrame for results
     good_filament_df = pd.DataFrame(index = np.sort(good_maxima_df['filament'].unique())[1:])
 
+    # assign filament label, number of maxima and center coordinates
     good_filament_df['filament'] = np.sort(good_maxima_df['filament'].unique())[1:]
-    good_filament_df['n_maxima'] = unique_filaments.count()['labels']
-    good_filament_df[['centrows', 'centcols']] = unique_filaments.mean()[['crows', 'ccols']]
+    good_filament_df['n_maxima'] = unique_filaments['labels'].count()
+    good_filament_df[['centrows', 'centcols']] = unique_filaments[['crows', 'ccols']].mean()
 
-    # Select filaments with 1 < N < 5 peaks
-    good_filament_df = good_filament_df[good_filament_df.n_maxima > 1]
-    good_filament_df = good_filament_df[good_filament_df.n_maxima < 5]
-    good_filament_df = good_filament_df.reset_index(drop=True)
-
-    # find individual row and col position of peaks
+    # find individual row and col position of the peaks
     maxrows, maxcols = [], []
     for i, filament in unique_filaments:
         maxrows.append(filament['crows'].values)
@@ -364,11 +356,11 @@ def good_filament_finder(good_maxima_df, imstack, gfp=1731, pad = 5):
     good_filament_df['maxrows'] = maxrows
     good_filament_df['maxcols'] = maxcols
 
-    # Find edge points, surrounding box and volume
-    good_filament_df['min_row'] = (unique_filaments.min()['crows'] - pad)
-    good_filament_df['max_row'] = (unique_filaments.max()['crows'] + pad)
-    good_filament_df['min_col'] = (unique_filaments.min()['ccols'] - pad)
-    good_filament_df['max_col'] = (unique_filaments.max()['ccols'] + pad)
+    # Find edge points, the bounding box and volume
+    good_filament_df['min_row'] = (good_filament_df['maxrows'].apply(np.min) - pad)
+    good_filament_df['max_row'] = (good_filament_df['maxrows'].apply(np.max) + pad)
+    good_filament_df['min_col'] = (good_filament_df['maxcols'].apply(np.min) - pad)
+    good_filament_df['max_col'] = (good_filament_df['maxcols'].apply(np.max) + pad)
 
     bboxs = []
     volumes = []
@@ -385,9 +377,14 @@ def good_filament_finder(good_maxima_df, imstack, gfp=1731, pad = 5):
     good_filament_df['volumes'] = volumes
 
     # calculate intensity
-    good_filament_df['intensity'] = good_filament_df.loc[:, 'volumes'].apply(np.sum)
-    good_filament_df['ngfp'] = good_filament_df.loc[:, 'intensity'] / gfp
-    good_filament_df['monomers'] = good_filament_df.loc[:, 'intensity'] / gfp / 2
+    good_filament_df['intensity'] = good_filament_df['volumes'].apply(np.sum)
+    good_filament_df['ngfp'] = good_filament_df['intensity'] / gfp
+    good_filament_df['monomers'] = good_filament_df['intensity'] / gfp / 2
+
+    # Select filaments with 1 < N < 5 peaks
+    good_filament_df = good_filament_df[good_filament_df.n_maxima > 1]
+    good_filament_df = good_filament_df[good_filament_df.n_maxima < 5]
+    good_filament_df = good_filament_df.reset_index(drop=True)
 
     # Plot results
     max_projection = np.amax(imstack, axis=0)
