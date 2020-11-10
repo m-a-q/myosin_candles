@@ -137,6 +137,7 @@ def identify_good_candles(imstack, df, Nobjects, intensity_minimum,
 
     # select subset of candles that are marked as good at the border and intensity
     good_candles_df = df[(df.good_intensity == 1) & (df.good_border == 1)]
+    print('Selected %d good Objects' % (len(good_candles_df)))
 
     # plot where the good candles are in the image
     good_overlay_fig, good_overlay_axes = plt.subplots()
@@ -311,7 +312,7 @@ def filament_finder(good_maxima_df, micron_per_pixel=0.043):
 
     # select all peaks with neighbors
     good_maxima_df = good_maxima_df.reset_index(drop=True)
-    peak_labels = good_maxima_df[good_maxima_df['neighbors'].apply(len) > 0].labels
+    peak_labels = good_maxima_df[good_maxima_df['neighbors'].apply(len) > 0].index
     
     # Assign labels to the individual filaments by iterating over the points and their respective neighbors
     good_maxima_df['filament'] = 0
