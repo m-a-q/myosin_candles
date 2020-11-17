@@ -24,9 +24,65 @@ from skimage.color import label2rgb  # Pretty display labeled images
 from skimage.morphology import remove_small_objects, remove_small_holes
 from skimage.feature import peak_local_max
 import pandas as pd  # For creating our dataframe which we will use for filtering
+import untangle   # for parsing the XML files
 
 
 # Functions for candle analysis
+def get_czifile_metadata(filename):
+    '''
+    Pull the metadata from the czi file. 
+    '''
+
+    # read the czifile
+    czi = czifile.CziFile(filename)
+    # read the metadata from the czifile
+    metadata_xml = czi.metadata()
+    # convert the metadata to an easily parsible structure
+    XML_data = untangle.parse(metadata_xml)
+    # pull the image data for number of rows, columns, planes, channels, timepoints
+    N_rows = int(XML_data.ImageDocument.Metadata.Information.Image.SizeY.cdata)
+    N_cols = int(XML_data.ImageDocument.Metadata.Information.Image.SizeX.cdata)
+    # have to check whether it's a z stack first
+    if hasattr(XML_data.ImageDocument.Metadata.Information.Image, 'SizeZ'):
+        N_zplanes = int(XML_data.ImageDocument.Metadata.Information.Image.SizeZ.cdata)
+    else:
+        N_zplanes = 1
+    # check whether it has multiple channels
+    if hasattr(XML_data.ImageDocument.Metadata.Information.Image, 'SizeC'):
+        N_channels = int(XML_data.ImageDocument.Metadata.Information.Image.SizeC.cdata)
+    else:
+        N_channels = 1
+    # check whether it has multiple time points
+    if hasattr(XML_data.ImageDocument.Metadata.Information.Image, 'SizeT'):
+        N_timepoints = int(XML_data.ImageDocument.Metadata.Information.Image.SizeT.cdata)
+        # pull the actual timestamps from the czi file
+        for attachment in czi.attachments():
+            if attachment.attachment_entry.name == 'TimeStamps':
+                timestamps = attachment.data()
+    else:
+        N_timepoints = 1
+        timestamps = []
+
+    # get the x,y,z resolutions - multiply by 1e6 to convert it to microns
+    x_micron_per_pix = float(XML_data.ImageDocument.Metadata.Scaling.Items.Distance[0].Value.cdata) * 1e6
+    y_micron_per_pix = float(XML_data.ImageDocument.Metadata.Scaling.Items.Distance[1].Value.cdata) * 1e6
+    z_micron_per_pix = float(XML_data.ImageDocument.Metadata.Scaling.Items.Distance[2].Value.cdata) * 1e6
+    
+    # create a dictionary with the data
+    exp_details = {
+        'N_rows' : N_rows,
+        'N_cols' : N_cols,
+        'N_zplanes' : N_zplanes,
+        'N_channels' : N_channels,
+        'N_timepoints' : N_timepoints,
+        'timestamps' : timestamps,
+        'x_micron_per_pix' : x_micron_per_pix,
+        'y_micron_per_pix' : y_micron_per_pix,
+        'z_micron_per_pix' : z_micron_per_pix
+    }
+    
+    return exp_details
+
 def prep_file(filename):
     # read in the file
     imstack = czifile.imread(filename)
@@ -36,12 +92,16 @@ def prep_file(filename):
 
     # make max projection and get the size of the image
     max_projection = np.amax(imstack, axis=0)
-    nrows, ncols = max_projection.shape
+
+    # get the metadata
+    exp_details = get_czifile_metadata(filename)
+
     max_projection_fig, max_projection_axes = plt.subplots()
     max_projection_axes.imshow(max_projection, cmap='Greys', vmin=50, vmax=800)
     max_projection_fig.show()
 
-    return imstack, max_projection, nrows, ncols
+    return imstack, max_projection, exp_details
+
 
 
 def find_candles(max_projection, min_value=1000):
