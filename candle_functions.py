@@ -24,24 +24,85 @@ from skimage.color import label2rgb  # Pretty display labeled images
 from skimage.morphology import remove_small_objects, remove_small_holes
 from skimage.feature import peak_local_max
 import pandas as pd  # For creating our dataframe which we will use for filtering
+import untangle   # for parsing the XML files
 
 
 # Functions for candle analysis
+def get_czifile_metadata(filename):
+    '''
+    Pull the metadata from the czi file. 
+    '''
+
+    # read the czifile
+    czi = czifile.CziFile(filename)
+    # read the metadata from the czifile
+    metadata_xml = czi.metadata()
+    # convert the metadata to an easily parsible structure
+    XML_data = untangle.parse(metadata_xml)
+    # pull the image data for number of rows, columns, planes, channels, timepoints
+    N_rows = int(XML_data.ImageDocument.Metadata.Information.Image.SizeY.cdata)
+    N_cols = int(XML_data.ImageDocument.Metadata.Information.Image.SizeX.cdata)
+    # have to check whether it's a z stack first
+    if hasattr(XML_data.ImageDocument.Metadata.Information.Image, 'SizeZ'):
+        N_zplanes = int(XML_data.ImageDocument.Metadata.Information.Image.SizeZ.cdata)
+    else:
+        N_zplanes = 1
+    # check whether it has multiple channels
+    if hasattr(XML_data.ImageDocument.Metadata.Information.Image, 'SizeC'):
+        N_channels = int(XML_data.ImageDocument.Metadata.Information.Image.SizeC.cdata)
+    else:
+        N_channels = 1
+    # check whether it has multiple time points
+    if hasattr(XML_data.ImageDocument.Metadata.Information.Image, 'SizeT'):
+        N_timepoints = int(XML_data.ImageDocument.Metadata.Information.Image.SizeT.cdata)
+        # pull the actual timestamps from the czi file
+        for attachment in czi.attachments():
+            if attachment.attachment_entry.name == 'TimeStamps':
+                timestamps = attachment.data()
+    else:
+        N_timepoints = 1
+        timestamps = []
+
+    # get the x,y,z resolutions - multiply by 1e6 to convert it to microns
+    x_micron_per_pix = float(XML_data.ImageDocument.Metadata.Scaling.Items.Distance[0].Value.cdata) * 1e6
+    y_micron_per_pix = float(XML_data.ImageDocument.Metadata.Scaling.Items.Distance[1].Value.cdata) * 1e6
+    z_micron_per_pix = float(XML_data.ImageDocument.Metadata.Scaling.Items.Distance[2].Value.cdata) * 1e6
+    
+    # create a dictionary with the data
+    exp_details = {
+        'N_rows' : N_rows,
+        'N_cols' : N_cols,
+        'N_zplanes' : N_zplanes,
+        'N_channels' : N_channels,
+        'N_timepoints' : N_timepoints,
+        'timestamps' : timestamps,
+        'x_micron_per_pix' : x_micron_per_pix,
+        'y_micron_per_pix' : y_micron_per_pix,
+        'z_micron_per_pix' : z_micron_per_pix
+    }
+    
+    return exp_details
+
 def prep_file(filename):
     # read in the file
     imstack = czifile.imread(filename)
-    
+
     # keep only those dimensions that have the z-stack
-    imstack = imstack[0,0,0,0,:,:,:,0]
-    
+    imstack = imstack[0, 0, 0, 0, :, :, :, 0]
+
     # make max projection and get the size of the image
     max_projection = np.amax(imstack, axis=0)
-    nrows, ncols = max_projection.shape
+
+    # get the metadata
+    exp_details = get_czifile_metadata(filename)
+
     max_projection_fig, max_projection_axes = plt.subplots()
     max_projection_axes.imshow(max_projection, cmap='Greys', vmin=50, vmax=np.max(max_projection)*.4)
     max_projection_fig.show()
-    
-    return imstack, max_projection, nrows, ncols
+
+    return imstack, max_projection, exp_details
+
+
 
 def find_candles(max_projection, min_value=1000):
 
@@ -116,43 +177,22 @@ def find_filter_values(imstack, df, Nobjects, volume_width=5):
     df['volume'] = candle_volume
     df['z_bg'] = z_bg
     df['xy_bg'] = xy_bg
-
-#     # Plot a histogram of the sum intensities of the top/bottom or side slices
-#     z_bg_fig, z_bg_axes = plt.subplots()
-#     z_bg_axes.hist(df.z_bg, bins = 150)
-#     z_bg_axes.set_title('Sum Intensity of Top and Bottom Slices')
-#     z_bg_fig.show()
-
-#     xy_bg_fig, xy_bg_axes = plt.subplots()
-#     xy_bg_axes.hist(df.xy_bg, bins = 150)
-#     xy_bg_axes.set_title('Sum Intensity of Side Slices')
-#     xy_bg_fig.show()
-
     
     return df, Nobjects
 
 
 def save_prefilter_candle_data(df, filename):
     df.to_hdf(filename[:-4] + '_prefilter_data.hd5', key='Candles', mode='w')
+    
     return
-
-# Fit a double gaussian curve
-def doublegaussian_fit(x, amp, x0, sig, amp_2, x0_2, sig_2):
-    return amp * np.exp(-1/2 * ((x - x0) / sig) ** 2) + \
-           amp_2 * np.exp(-1/2 * ((x - x0_2) / sig_2) ** 2)
-
-
-# Fit a gaussian curve
-def gaussian_fit(x, amp, x0, sig):
-    return amp * np.exp(-1/2 * ((x - x0) / sig) ** 2)
 
 def fit_all_prefilter_distribution(all_prefilter_data_60, all_prefilter_data_120):
     
     # make a histogram of the intensities for the sum intensity of z faces or xy faces
-    counts60z, bins60z = np.histogram(all_prefilter_data_60[:, 0], bins=150)
-    counts60xy, bins60xy = np.histogram(all_prefilter_data_60[:, 1], bins=150)
-    counts120z, bins120z = np.histogram(all_prefilter_data_120[:, 0], bins=150)
-    counts120xy, bins120xy = np.histogram(all_prefilter_data_120[:, 1], bins=150)
+    counts60z, bins60z = np.histogram(all_prefilter_data_60['z_bg'].values, bins=150)
+    counts60xy, bins60xy = np.histogram(all_prefilter_data_60['xy_bg'].values, bins=150)
+    counts120z, bins120z = np.histogram(all_prefilter_data_120['z_bg'].values, bins=150)
+    counts120xy, bins120xy = np.histogram(all_prefilter_data_120['xy_bg'].values, bins=150)
 
     # This gets the center of the bin instead of the edges
     bins60z = bins60z[:-1] + np.diff(bins60z/2)
@@ -163,17 +203,18 @@ def fit_all_prefilter_distribution(all_prefilter_data_60, all_prefilter_data_120
     # Make initial guesses as to fitting parameters
     hist_max60z = np.argwhere(counts60z == np.max(counts60z))
     hist_max120z = np.argwhere(counts120z == np.max(counts120z))
-    p0_60z = [np.max(counts60z), bins60[hist_max60z[0, 0]],
-             np.std(all_prefilter_data_60[:, 0])]
+    p0_60z = [np.max(counts60z), bins60z[hist_max60z[0, 0]],
+             np.std(all_prefilter_data_60['z_bg'].values)]
     p0_120z = [np.max(counts120z), bins120z[hist_max120z[0, 0]],
-              np.std(all_prefilter_data_120[:, 0])]
+              np.std(all_prefilter_data_120['z_bg'].values)]
               
     hist_max60xy = np.argwhere(counts60xy == np.max(counts60xy))
     hist_max120xy = np.argwhere(counts120xy == np.max(counts120xy))
     p0_60xy = [np.max(counts60xy), bins60xy[hist_max60xy[0, 0]],
-             np.std(all_prefilter_data_60[:, 1])]
+             np.std(all_prefilter_data_60['xy_bg'].values)]
     p0_120xy = [np.max(counts120xy), bins120xy[hist_max120xy[0, 0]],
-              np.std(all_prefilter_data_120[:, 1])]
+              np.std(all_prefilter_data_120['xy_bg'].values)]
+    
     # Fit the curve
     prefilter_params60z, prefilter_params60z_covariance = optimize.curve_fit(
         gaussian_fit, bins60z, counts60z, p0_60z)
@@ -192,11 +233,12 @@ def fit_all_prefilter_distribution(all_prefilter_data_60, all_prefilter_data_120
     prefilter_bg_fit120xy = gaussian_fit(bins120xy, prefilter_params120xy[0], prefilter_params120xy[1], prefilter_params120xy[2])
 
     # Plot result
-    all_prefilter_z_distribution_fit_fig, all_z_distribution_fit_axes = plt.subplots()
-    all_prefilter_z_distribution_fit_axes.hist(all_prefilter_data_60[:, 0], bins=150, color="navy")
-    all_prefilter_z_distribution_fit_axes.plot(bins60z, prefilter_bg_fit60z, '-k')
-    all_prefilter_z_distribution_fit_axes.hist(all_prefilter_data_120[:, 0], bins=150, color="purple")
+    all_prefilter_z_distribution_fit_fig, all_prefilter_z_distribution_fit_axes = plt.subplots()
+    all_prefilter_z_distribution_fit_axes.hist(all_prefilter_data_120['z_bg'].values, bins=150, color="purple")
     all_prefilter_z_distribution_fit_axes.plot(bins120z, prefilter_bg_fit120z, '-k')
+    all_prefilter_z_distribution_fit_axes.hist(all_prefilter_data_60['z_bg'].values, bins=150, color="navy")
+    all_prefilter_z_distribution_fit_axes.plot(bins60z, prefilter_bg_fit60z, '-k')
+
     all_prefilter_z_distribution_fit_axes.set_xlabel('Summed Intensity of Z faces')
     all_prefilter_z_distribution_fit_axes.set_ylabel('Counts')
     all_prefilter_z_distribution_fit_axes.set_title('Combined Data')
@@ -207,11 +249,11 @@ def fit_all_prefilter_distribution(all_prefilter_data_60, all_prefilter_data_120
     # save the figure
     all_prefilter_z_distribution_fit_fig.savefig('all_prefilter_z_data_histograms.eps', dpi=150)
         
-    all_prefilter_xy_distribution_fit_fig, all_xy_distribution_fit_axes = plt.subplots()
-    all_prefilter_xy_distribution_fit_axes.hist(all_prefilter_data_60[:, 1], bins=150, color="navy")
-    all_prefilter_xy_distribution_fit_axes.plot(bins60xy, prefilter_bg_fit60xy, '-k')
-    all_prefilter_xy_distribution_fit_axes.hist(all_prefilter_data_120[:, 1], bins=150, color="purple")
+    all_prefilter_xy_distribution_fit_fig, all_prefilter_xy_distribution_fit_axes = plt.subplots()
+    all_prefilter_xy_distribution_fit_axes.hist(all_prefilter_data_120['xy_bg'].values, bins=150, color="purple")
     all_prefilter_xy_distribution_fit_axes.plot(bins120xy, prefilter_bg_fit120xy, '-k')
+    all_prefilter_xy_distribution_fit_axes.hist(all_prefilter_data_60['xy_bg'].values, bins=150, color="navy")
+    all_prefilter_xy_distribution_fit_axes.plot(bins60xy, prefilter_bg_fit60xy, '-k')
     all_prefilter_xy_distribution_fit_axes.set_xlabel('Summed Intensity of XY faces')
     all_prefilter_xy_distribution_fit_axes.set_ylabel('Counts')
     all_prefilter_xy_distribution_fit_axes.set_title('Combined Data')
@@ -225,6 +267,7 @@ def fit_all_prefilter_distribution(all_prefilter_data_60, all_prefilter_data_120
     return prefilter_params60z, prefilter_params120z, prefilter_params60xy, prefilter_params120xy  
 
               
+
 def identify_good_candles(imstack, df, Nobjects, intensity_minimum, 
                           volume_width=5, z_max = 2500, xy_max = 5000, filename=None):
 
@@ -236,7 +279,9 @@ def identify_good_candles(imstack, df, Nobjects, intensity_minimum,
 
     # Create empty holders for parameters
     candle_good_border = []
+    candle_sum_intensity = []
     good_intensity = []
+    candle_volume = []
     bg = []
 
     max_projection = np.amax(imstack, axis=0)
@@ -249,7 +294,9 @@ def identify_good_candles(imstack, df, Nobjects, intensity_minimum,
             # select volume around the candle
             substack = imstack[:, df.crows[candle]-vw:df.crows[candle] + vwr,
                                df.ccols[candle]-vw:df.ccols[candle]+vwr]
-
+            candle_volume.append(substack)
+            # Sum the intensity in that volume
+            candle_sum_intensity.append(np.sum(substack))
             # if intensity is above a threshold value mark it as good
             if np.sum(substack) > intensity_minimum:
                 good_intensity.append(1)
@@ -278,8 +325,10 @@ def identify_good_candles(imstack, df, Nobjects, intensity_minimum,
             bg.append(0)
 
     # Add columns to the dataframe
+    df['sum_intensity'] = candle_sum_intensity
     df['good_border'] = candle_good_border
     df['good_intensity'] = good_intensity
+    df['volume'] = candle_volume
     df['bg'] = bg
 
     # select subset of candles that are marked as good at the border and intensity
@@ -314,7 +363,17 @@ def identify_good_candles(imstack, df, Nobjects, intensity_minimum,
     return good_candles_df
 
 
-              
+# Fit a double gaussian curve
+def doublegaussian_fit(x, amp, x0, sig, amp_2, x0_2, sig_2):
+    return amp * np.exp(-1/2 * ((x - x0) / sig) ** 2) + \
+           amp_2 * np.exp(-1/2 * ((x - x0_2) / sig_2) ** 2)
+
+
+# Fit a gaussian curve
+def gaussian_fit(x, amp, x0, sig):
+    return amp * np.exp(-1/2 * ((x - x0) / sig) ** 2)
+
+
 def fit_candle_distribution(good_candles_df, candle_size, filename):
     # make a histogram of the intensities
     counts, bins = np.histogram(good_candles_df.sum_intensity - good_candles_df.bg, bins=150)
@@ -353,7 +412,7 @@ def fit_candle_distribution(good_candles_df, candle_size, filename):
     return params
 
 
-def save_candle_intensity(good_candles_df, filename):
+def save_candle_properties(good_candles_df, filename):
     good_candles_df.to_hdf(filename[:-4] + '_data.hd5', key='Candles', mode='w')
                            
     return
@@ -361,10 +420,12 @@ def save_candle_intensity(good_candles_df, filename):
 
 def fit_allcandles_distribution(all_data_60, all_data_120):
     # make a histogram of the intensities
+#     bg_subtract_intensity_60 = all_data_60['sum_intensity'].values - all_data_60['bg'].values
+#     bg_subtract_intensity_120 = all_data_120['sum_intensity'].values - all_data_120['bg'].values
     counts60, bins60 = np.histogram(
-        all_data_60[:, 0] - all_data_60[:, 1], bins=150)
+        all_data_60['sum_intensity'].values, bins=150)
     counts120, bins120 = np.histogram(
-        all_data_120[:, 0] - all_data_120[:, 1], bins=150)
+        all_data_120['sum_intensity'].values, bins=150)
 
     # This gets the center of the bin instead of the edges
     bins60 = bins60[:-1] + np.diff(bins60/2)
@@ -374,9 +435,9 @@ def fit_allcandles_distribution(all_data_60, all_data_120):
     hist_max60 = np.argwhere(counts60 == np.max(counts60))
     hist_max120 = np.argwhere(counts120 == np.max(counts120))
     p0_60 = [np.max(counts60), bins60[hist_max60[0, 0]],
-             np.std(all_data_60[:, 0] - all_data_60[:, 1])]
+             np.std(all_data_60['sum_intensity'].values)]
     p0_120 = [np.max(counts120), bins120[hist_max120[0, 0]],
-              np.std(all_data_120[:, 0] - all_data_120[:, 1])]
+              np.std(all_data_120['sum_intensity'].values)]
 
     # Fit the curve
     params60, params60_covariance = optimize.curve_fit(
@@ -390,9 +451,9 @@ def fit_allcandles_distribution(all_data_60, all_data_120):
 
     # Plot result
     all_distribution_fit_fig, all_distribution_fit_axes = plt.subplots()
-    all_distribution_fit_axes.hist(all_data_60[:, 0] - all_data_60[:, 1], bins=150, color="navy")
+    all_distribution_fit_axes.hist(all_data_60['sum_intensity'].values, bins=150, color="navy")
     all_distribution_fit_axes.plot(bins60, bg_fit60, '-k')
-    all_distribution_fit_axes.hist(all_data_120[:, 0] - all_data_120[:, 1], bins=150, color="purple")
+    all_distribution_fit_axes.hist(all_data_120['sum_intensity'].values, bins=150, color="purple")
     all_distribution_fit_axes.plot(bins120, bg_fit120, '-k')
     all_distribution_fit_axes.set_xlabel('Summed Intensity Candle - Background Subtracted')
     all_distribution_fit_axes.set_ylabel('Counts')
@@ -413,7 +474,7 @@ def fit_allcandles_distribution(all_data_60, all_data_120):
     line = slope*x+intercept
 
     candle_calibration_fig, candle_calibration_axes = plt.subplots()
-    candle_calibration_axes.errorbar(x, y, yerr=yerr, max_color='purple', fmt='s')
+    candle_calibration_axes.errorbar(x, y, yerr=yerr, fmt='s', ecolor='purple')
     candle_calibration_axes.plot(x, line, 'k')
     candle_calibration_axes.set_title(
         'Candle Calibration\n' + 'y = ' + str(np.round(slope)) + 'X + ' + str(np.round(intercept)))
@@ -428,7 +489,6 @@ def fit_allcandles_distribution(all_data_60, all_data_120):
     candle_calibration_fig.savefig('all_data_calibration.eps', dpi=150)
 
     return params60, params120
-
 
 def filament_finder(good_maxima_df, micron_per_pixel=0.043, min_dist=0.3, max_dist=0.5):
     
