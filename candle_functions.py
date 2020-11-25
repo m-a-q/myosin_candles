@@ -195,7 +195,7 @@ def find_filter_values(imstack, df, Nobjects, volume_width=5):
 
 
 def save_prefilter_candle_data(df, filename):
-    df.to_hdf(filename[:-4] + '_prefilter_data.hd5', key='Candles', mode='w')
+    df.to_hdf(filename[:-4] + '_prefilterdata.hd5', key='Candles', mode='w')
     
     return
 
