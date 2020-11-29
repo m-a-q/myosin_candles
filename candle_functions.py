@@ -126,7 +126,7 @@ def find_candles(max_projection, min_value=1000):
     # Plot results
     overlay_fig, overlay_axes = plt.subplots()
     overlay_axes.imshow(max_projection, cmap='Greys', vmin=50, vmax=np.max(max_projection)*.4)
-    overlay_axes.plot(peak_coords[:, 1], peak_coords[:, 0], 'xr')
+    overlay_axes.plot(peak_coords[:, 1], peak_coords[:, 0], 'x', color='scarlet')
     overlay_fig.show()
 
     return df, Nobjects
@@ -255,10 +255,11 @@ def fit_all_prefilter_distribution(all_prefilter_data_60, all_prefilter_data_120
     
     # Plot result
     all_prefilter_z_distribution_fit_fig, all_prefilter_z_distribution_fit_axes = plt.subplots()
-    all_prefilter_z_distribution_fit_axes.hist(all_prefilter_data_120['z_bg'].values, bins=150, color="purple")
-    all_prefilter_z_distribution_fit_axes.plot(bins120z, prefilter_bg_fit120z, '-k')
-    all_prefilter_z_distribution_fit_axes.hist(all_prefilter_data_60['z_bg'].values, bins=150, color="navy")
+    all_prefilter_z_distribution_fit_axes.hist(all_prefilter_data_60['z_bg'].values, bins=150, color="xkcd:french blue")
     all_prefilter_z_distribution_fit_axes.plot(bins60z, prefilter_bg_fit60z, '-k')
+    all_prefilter_z_distribution_fit_axes.hist(all_prefilter_data_120['z_bg'].values, bins=150, color="xkcd:violet red")
+    all_prefilter_z_distribution_fit_axes.plot(bins120z, prefilter_bg_fit120z, '-k')
+
 
     
     all_prefilter_z_distribution_fit_axes.set_xlabel('Summed Intensity of Z faces')
@@ -272,10 +273,10 @@ def fit_all_prefilter_distribution(all_prefilter_data_60, all_prefilter_data_120
     all_prefilter_z_distribution_fit_fig.savefig('all_prefilter_z_data_histograms.eps', dpi=150)
         
     all_prefilter_xy_distribution_fit_fig, all_prefilter_xy_distribution_fit_axes = plt.subplots()
-    all_prefilter_xy_distribution_fit_axes.hist(all_prefilter_data_120['xy_bg'].values, bins=150, color="purple")
-    all_prefilter_xy_distribution_fit_axes.plot(bins120xy, prefilter_bg_fit120xy, '-k')
-    all_prefilter_xy_distribution_fit_axes.hist(all_prefilter_data_60['xy_bg'].values, bins=150, color="navy")
+    all_prefilter_xy_distribution_fit_axes.hist(all_prefilter_data_60['xy_bg'].values, bins=150, color="xkcd:french blue")
     all_prefilter_xy_distribution_fit_axes.plot(bins60xy, prefilter_bg_fit60xy, '-k')
+    all_prefilter_xy_distribution_fit_axes.hist(all_prefilter_data_120['xy_bg'].values, bins=150, color="xkcd:violet red")
+    all_prefilter_xy_distribution_fit_axes.plot(bins120xy, prefilter_bg_fit120xy, '-k')
 
     
     all_prefilter_xy_distribution_fit_axes.set_xlabel('Summed Intensity of XY faces')
@@ -356,7 +357,7 @@ def identify_good_candles(imstack, df, Nobjects, intensity_minimum,
     good_overlay_fig, good_overlay_axes = plt.subplots()
     good_overlay_axes.imshow(max_projection, cmap='Greys', vmin=50, vmax=np.max(max_projection)*.4)
     good_overlay_axes.plot(
-        good_candles_df.ccols, good_candles_df.crows, 'x', color='xkcd:bright purple')
+        good_candles_df.ccols, good_candles_df.crows, 'x', color='xkcd:jungle green')
     good_overlay_fig.show()
 
     # plot histogram of intensities
