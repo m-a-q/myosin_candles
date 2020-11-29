@@ -601,7 +601,6 @@ def identify_good_maxima(imstack, df, Nobjects, intensity_minimum,
 
     return good_maxima_df
 
-
 def filament_finder(good_maxima_df, micron_per_pixel=0.043, min_dist=0.2, max_dist=0.5):
     
     # calculate pairwise distance between points
