@@ -4,6 +4,7 @@ import skimage.io as io
 # %matplotlib notebook
 # This toolbox is to create our plots. Line above makes them interactive
 import matplotlib.pyplot as plt
+import seaborn as sns              #plotting tool
 # This toolbox is a useful directory tool to see what files we have in our folder
 import os
 import cv2                         # image processing toolbox
@@ -97,7 +98,7 @@ def prep_file(filename):
     exp_details = get_czifile_metadata(filename)
 
     max_projection_fig, max_projection_axes = plt.subplots()
-    max_projection_axes.imshow(max_projection, cmap='Greys', vmin=50, vmax=800)
+    max_projection_axes.imshow(max_projection, cmap='Greys', vmin=50, vmax=np.max(max_projection)*.4)
     max_projection_fig.show()
 
     return imstack, max_projection, exp_details
@@ -124,15 +125,174 @@ def find_candles(max_projection, min_value=1000):
 
     # Plot results
     overlay_fig, overlay_axes = plt.subplots()
-    overlay_axes.imshow(max_projection, cmap='Greys', vmin=50, vmax=800)
+    overlay_axes.imshow(max_projection, cmap='Greys', vmin=50, vmax=np.max(max_projection)*.4)
     overlay_axes.plot(peak_coords[:, 1], peak_coords[:, 0], 'xr')
     overlay_fig.show()
 
     return df, Nobjects
 
 
+def find_filter_values(imstack, df, Nobjects, volume_width=5):
+    
+    # volume width variables
+    vw = volume_width
+    vwl = volume_width - 1
+    vwr = volume_width + 1
+    z = imstack.shape[0]
+
+    # Create empty holders for parameters
+    candle_volume = []
+    candle_sum_intensity = []
+    # Create variable for the different faces of the cube filter (top and bottom faces = z_bg, side faces = xy_bg)
+    z_bg = []
+    xy_bg = []
+    
+    max_projection = np.amax(imstack, axis=0)
+    nrows, ncols = max_projection.shape
+    
+    # Loop through each cand and create a substack with a defined volume around it (change with volume_width definition)
+    # Get the intensities of the faces of the cube filter in order to empirically define a maximum intensity threshold for those faces for each data set
+    # The top/bottom and side slices are separated in this analysis because larger z stacks would likely mean that there is very 
+        # little background for the top and bottom z slice but the side slices likely have quite a bit (especially with an abberation)
+    for candle in np.arange(0,Nobjects):
+        #remove any candles that are on the edges of the image
+        if df.crows[candle] > vwl and df.crows[candle] < (nrows - vwr) and df.ccols[candle] > vwl and df.ccols[candle] < (ncols - vwr):
+            # select volume around the candle
+            substack = imstack[:, df.crows[candle]-vw:df.crows[candle] + vwr,
+                               df.ccols[candle]-vw:df.ccols[candle]+vwr]
+            candle_volume.append(substack)
+            # Sum the intensity in that volume
+            candle_sum_intensity.append(np.sum(substack))
+            # Add the sum intensity of these faces to their new variables
+            z_bg.append(np.sum(substack[0, :, :]) + np.sum(substack[-1, :, :]))
+            xy_bg.append(np.sum(substack[:, 0, :]) + np.sum(substack[:, -1, :]) + np.sum(substack[:, :, 0]) + np.sum(substack[:, :, -1]))
+        # If the candles were on the edge, their data values are set to zero (to keep the same shape for all variables)    
+        else:
+            candle_sum_intensity.append(0)
+            candle_volume.append(0)
+            z_bg.append(0)
+            xy_bg.append(0)
+            
+    # Add columns to the dataframe
+    df['sum_intensity'] = candle_sum_intensity
+    df['volume'] = candle_volume
+    df['z_bg'] = z_bg
+    df['xy_bg'] = xy_bg
+
+#     # Plot a histogram of the sum intensities of the top/bottom or side slices
+#     z_bg_fig, z_bg_axes = plt.subplots()
+#     z_bg_axes.hist(df.z_bg, bins = 150)
+#     z_bg_axes.set_title('Sum Intensity of Top and Bottom Slices')
+#     z_bg_fig.show()
+
+#     xy_bg_fig, xy_bg_axes = plt.subplots()
+#     xy_bg_axes.hist(df.xy_bg, bins = 150)
+#     xy_bg_axes.set_title('Sum Intensity of Side Slices')
+#     xy_bg_fig.show()
+
+    
+    return df, Nobjects
+
+
+def save_prefilter_candle_data(df, filename):
+    df.to_hdf(filename[:-4] + '_prefilterdata.hd5', key='Candles', mode='w')
+    
+    return
+
+
+def fit_all_prefilter_distribution(all_prefilter_data_60, all_prefilter_data_120):
+    
+    # make a histogram of the intensities for the sum intensity of z faces or xy faces
+    counts60z, bins60z = np.histogram(all_prefilter_data_60['z_bg'].values, bins=150)
+    counts60xy, bins60xy = np.histogram(all_prefilter_data_60['xy_bg'].values, bins=150)
+    counts120z, bins120z = np.histogram(all_prefilter_data_120['z_bg'].values, bins=150)
+    counts120xy, bins120xy = np.histogram(all_prefilter_data_120['xy_bg'].values, bins=150)
+
+    # This gets the center of the bin instead of the edges
+    bins60z = bins60z[:-1] + np.diff(bins60z/2)
+    bins60xy = bins60xy[:-1] + np.diff(bins60xy/2)
+    bins120z = bins120z[:-1] + np.diff(bins120z/2)
+    bins120xy = bins120xy[:-1] + np.diff(bins120xy/2)
+
+    
+    # Make initial guesses as to fitting parameters
+    hist_max60z = np.argwhere(counts60z == np.max(counts60z))
+    hist_max120z = np.argwhere(counts120z == np.max(counts120z))
+
+    p0_60z = [np.max(counts60z), bins60z[hist_max60z[0, 0]],
+             np.std(all_prefilter_data_60['z_bg'].values)]
+    p0_120z = [np.max(counts120z), bins120z[hist_max120z[0, 0]],
+              np.std(all_prefilter_data_120['z_bg'].values)]
+
+    
+    hist_max60xy = np.argwhere(counts60xy == np.max(counts60xy))
+    hist_max120xy = np.argwhere(counts120xy == np.max(counts120xy))
+
+    p0_60xy = [np.max(counts60xy), bins60xy[hist_max60xy[0, 0]],
+             np.std(all_prefilter_data_60['xy_bg'].values)]
+    p0_120xy = [np.max(counts120xy), bins120xy[hist_max120xy[0, 0]],
+              np.std(all_prefilter_data_120['xy_bg'].values)]
+  
+    
+    # Fit the curve
+    prefilter_params60z, prefilter_params60z_covariance = optimize.curve_fit(
+        gaussian_fit, bins60z, counts60z, p0_60z)
+    prefilter_params120z, prefilter_params120z_covariance = optimize.curve_fit(
+        gaussian_fit, bins120z, counts120z, p0_120z)
+
+    prefilter_params60xy, prefilter_params60xy_covariance = optimize.curve_fit(
+        gaussian_fit, bins60xy, counts60xy, p0_60xy)
+    prefilter_params120xy, prefilter_params120xy_covariance = optimize.curve_fit(
+        gaussian_fit, bins120xy, counts120xy, p0_120xy)      
+
+    
+                  
+    # Create a fit line using the parameters from your fit and the original bins
+    prefilter_bg_fit60z = gaussian_fit(bins60z, prefilter_params60z[0], prefilter_params60z[1], prefilter_params60z[2])
+    prefilter_bg_fit120z = gaussian_fit(bins120z, prefilter_params120z[0], prefilter_params120z[1], prefilter_params120z[2])
+    prefilter_bg_fit60xy = gaussian_fit(bins60xy, prefilter_params60xy[0], prefilter_params60xy[1], prefilter_params60xy[2])
+    prefilter_bg_fit120xy = gaussian_fit(bins120xy, prefilter_params120xy[0], prefilter_params120xy[1], prefilter_params120xy[2])
+    
+    # Plot result
+    all_prefilter_z_distribution_fit_fig, all_prefilter_z_distribution_fit_axes = plt.subplots()
+    all_prefilter_z_distribution_fit_axes.hist(all_prefilter_data_120['z_bg'].values, bins=150, color="purple")
+    all_prefilter_z_distribution_fit_axes.plot(bins120z, prefilter_bg_fit120z, '-k')
+    all_prefilter_z_distribution_fit_axes.hist(all_prefilter_data_60['z_bg'].values, bins=150, color="navy")
+    all_prefilter_z_distribution_fit_axes.plot(bins60z, prefilter_bg_fit60z, '-k')
+
+    
+    all_prefilter_z_distribution_fit_axes.set_xlabel('Summed Intensity of Z faces')
+    all_prefilter_z_distribution_fit_axes.set_ylabel('Counts')
+    all_prefilter_z_distribution_fit_axes.set_title('Combined Data')
+    # all_distribution_fit_axes.text(0.95, 0.95, 'Average Value \nof a GFP fluorophore:\n' + str(np.round(params[1]/candle_size)),
+    # verticalalignment='top', horizontalalignment='right',
+    # transform=all_distribution_fit_axes.transAxes, fontsize=10)
+    all_prefilter_z_distribution_fit_fig.show()
+    # save the figure
+    all_prefilter_z_distribution_fit_fig.savefig('all_prefilter_z_data_histograms.eps', dpi=150)
+        
+    all_prefilter_xy_distribution_fit_fig, all_prefilter_xy_distribution_fit_axes = plt.subplots()
+    all_prefilter_xy_distribution_fit_axes.hist(all_prefilter_data_120['xy_bg'].values, bins=150, color="purple")
+    all_prefilter_xy_distribution_fit_axes.plot(bins120xy, prefilter_bg_fit120xy, '-k')
+    all_prefilter_xy_distribution_fit_axes.hist(all_prefilter_data_60['xy_bg'].values, bins=150, color="navy")
+    all_prefilter_xy_distribution_fit_axes.plot(bins60xy, prefilter_bg_fit60xy, '-k')
+
+    
+    all_prefilter_xy_distribution_fit_axes.set_xlabel('Summed Intensity of XY faces')
+    all_prefilter_xy_distribution_fit_axes.set_ylabel('Counts')
+    all_prefilter_xy_distribution_fit_axes.set_title('Combined Data')
+    # all_distribution_fit_axes.text(0.95, 0.95, 'Average Value \nof a GFP fluorophore:\n' + str(np.round(params[1]/candle_size)),
+    # verticalalignment='top', horizontalalignment='right',
+    # transform=all_distribution_fit_axes.transAxes, fontsize=10)
+    all_prefilter_xy_distribution_fit_fig.show()
+    # save the figure
+    all_prefilter_xy_distribution_fit_fig.savefig('all_prefilter_xy_data_histograms.eps', dpi=150)
+    
+    return prefilter_params60z, prefilter_params120z,  prefilter_params60xy, prefilter_params120xy 
+              
+
 def identify_good_candles(imstack, df, Nobjects, intensity_minimum, 
-                          volume_width=5, min_val=2500, filename=None):
+                          volume_width=5, z_max = 2500, xy_max = 5000, filename=None):
 
     # volume width variables
     vw = volume_width
@@ -142,9 +302,7 @@ def identify_good_candles(imstack, df, Nobjects, intensity_minimum,
 
     # Create empty holders for parameters
     candle_good_border = []
-    candle_sum_intensity = []
     good_intensity = []
-    candle_volume = []
     bg = []
 
     max_projection = np.amax(imstack, axis=0)
@@ -157,18 +315,15 @@ def identify_good_candles(imstack, df, Nobjects, intensity_minimum,
             # select volume around the candle
             substack = imstack[:, df.crows[candle]-vw:df.crows[candle] + vwr,
                                df.ccols[candle]-vw:df.ccols[candle]+vwr]
-            candle_volume.append(substack)
-            # Sum the intensity in that volume
-            candle_sum_intensity.append(np.sum(substack))
+
             # if intensity is above a threshold value mark it as good
             if np.sum(substack) > intensity_minimum:
                 good_intensity.append(1)
             else:
                 good_intensity.append(0)
             # If the edges of the candle volume are below a threshold intensity, mark it as good
-            if np.sum(substack[0, :, :]) < min_val and np.sum(substack[-1, :, :]) < min_val \
-                    and np.sum(substack[:, 0, :]) < min_val and np.sum(substack[:, -1, :]) < min_val \
-                    and np.sum(substack[:, :, 0]) < min_val and np.sum(substack[:, :, -1]) < min_val:
+            if (np.sum(substack[0, :, :]) + np.sum(substack[-1, :, :])) < z_max \
+                    and (np.sum(substack[:, 0, :]) + np.sum(substack[:, -1, :]) + np.sum(substack[:, :, 0]) + np.sum(substack[:, :, -1])) < xy_max:
                 candle_good_border.append(1)
             else:
                 candle_good_border.append(0)
@@ -183,25 +338,23 @@ def identify_good_candles(imstack, df, Nobjects, intensity_minimum,
             bg.append(edge_mean * substack.shape[0] * substack.shape[1] * substack.shape[2])
         else:
             candle_good_border.append(0)
-            candle_sum_intensity.append(0)
             good_intensity.append(0)
-            candle_volume.append(0)
             bg.append(0)
 
     # Add columns to the dataframe
-    df['sum_intensity'] = candle_sum_intensity
     df['good_border'] = candle_good_border
     df['good_intensity'] = good_intensity
-    df['volume'] = candle_volume
     df['bg'] = bg
+
 
     # select subset of candles that are marked as good at the border and intensity
     good_candles_df = df[(df.good_intensity == 1) & (df.good_border == 1)]
     print('Selected %d good Objects' % (len(good_candles_df)))
+    good_candles_df.head(10)
 
     # plot where the good candles are in the image
     good_overlay_fig, good_overlay_axes = plt.subplots()
-    good_overlay_axes.imshow(max_projection, cmap='Greys', vmin=50, vmax=800)
+    good_overlay_axes.imshow(max_projection, cmap='Greys', vmin=50, vmax=np.max(max_projection)*.4)
     good_overlay_axes.plot(
         good_candles_df.ccols, good_candles_df.crows, 'x', color='xkcd:bright purple')
     good_overlay_fig.show()
@@ -218,11 +371,11 @@ def identify_good_candles(imstack, df, Nobjects, intensity_minimum,
         hist_inten_axes.set_title(filename)
     hist_inten_fig.show()
 
-    # plot histograms of bg values
-    bg_fig, bg_axes = plt.subplots()
-    bg_axes.hist(good_candles_df.bg, bins=150)
-    bg_axes.set_title('Average background around candle')
-    bg_fig.show()
+#     # plot histograms of bg values
+#     bg_fig, bg_axes = plt.subplots()
+#     bg_axes.hist(good_candles_df.bg, bins=150)
+#     bg_axes.set_title('Average background around candle')
+#     bg_fig.show()
 
     return good_candles_df
 
@@ -276,32 +429,36 @@ def fit_candle_distribution(good_candles_df, candle_size, filename):
     return params
 
 
-def save_candle_intensity(good_candles_df, filename):
-    output = np.array((good_candles_df.sum_intensity, good_candles_df.bg))
-    # save the output array to a text file
-    np.savetxt(filename[:-4] + '_data.txt',
-               output.T, fmt='%8.4f', delimiter='\t')
+def save_candle_properties(good_candles_df, filename):
+    good_candles_df.to_hdf(filename[:-4] + '_data.hd5', key='Candles', mode='w')
+                           
     return
-
+                           
 
 def fit_allcandles_distribution(all_data_60, all_data_120):
     # make a histogram of the intensities
+#     bg_subtract_intensity_60 = all_data_60['sum_intensity'].values - all_data_60['bg'].values
+#     bg_subtract_intensity_120 = all_data_120['sum_intensity'].values - all_data_120['bg'].values
     counts60, bins60 = np.histogram(
-        all_data_60[:, 0] - all_data_60[:, 1], bins=150)
+        all_data_60['sum_intensity'].values, bins=150)
     counts120, bins120 = np.histogram(
-        all_data_120[:, 0] - all_data_120[:, 1], bins=150)
+        all_data_120['sum_intensity'].values, bins=150)
 
+    
     # This gets the center of the bin instead of the edges
     bins60 = bins60[:-1] + np.diff(bins60/2)
     bins120 = bins120[:-1] + np.diff(bins120/2)
 
+
     # Make initial guesses as to fitting parameters
     hist_max60 = np.argwhere(counts60 == np.max(counts60))
     hist_max120 = np.argwhere(counts120 == np.max(counts120))
+
     p0_60 = [np.max(counts60), bins60[hist_max60[0, 0]],
-             np.std(all_data_60[:, 0] - all_data_60[:, 1])]
+             np.std(all_data_60['sum_intensity'].values)]
     p0_120 = [np.max(counts120), bins120[hist_max120[0, 0]],
-              np.std(all_data_120[:, 0] - all_data_120[:, 1])]
+              np.std(all_data_120['sum_intensity'].values)]
+
 
     # Fit the curve
     params60, params60_covariance = optimize.curve_fit(
@@ -309,16 +466,19 @@ def fit_allcandles_distribution(all_data_60, all_data_120):
     params120, params120_covariance = optimize.curve_fit(
         gaussian_fit, bins120, counts120, p0_120)
 
+    
     # Create a fit line using the parameters from your fit and the original bins
     bg_fit60 = gaussian_fit(bins60, params60[0], params60[1], params60[2])
     bg_fit120 = gaussian_fit(bins120, params120[0], params120[1], params120[2])
 
+    
     # Plot result
     all_distribution_fit_fig, all_distribution_fit_axes = plt.subplots()
-    all_distribution_fit_axes.hist(all_data_60[:, 0] - all_data_60[:, 1], bins=150, color="navy")
+    all_distribution_fit_axes.hist(all_data_60['sum_intensity'].values, bins=150, color="navy")
     all_distribution_fit_axes.plot(bins60, bg_fit60, '-k')
-    all_distribution_fit_axes.hist(all_data_120[:, 0] - all_data_120[:, 1], bins=150, color="purple")
+    all_distribution_fit_axes.hist(all_data_120['sum_intensity'].values, bins=150, color="purple")
     all_distribution_fit_axes.plot(bins120, bg_fit120, '-k')
+
     all_distribution_fit_axes.set_xlabel('Summed Intensity Candle - Background Subtracted')
     all_distribution_fit_axes.set_ylabel('Counts')
     all_distribution_fit_axes.set_title('Combined Data')
@@ -338,7 +498,7 @@ def fit_allcandles_distribution(all_data_60, all_data_120):
     line = slope*x+intercept
 
     candle_calibration_fig, candle_calibration_axes = plt.subplots()
-    candle_calibration_axes.errorbar(x, y, yerr=yerr, max_color='purple', fmt='s')
+    candle_calibration_axes.errorbar(x, y, yerr=yerr, fmt='s', ecolor='purple')
     candle_calibration_axes.plot(x, line, 'k')
     candle_calibration_axes.set_title(
         'Candle Calibration\n' + 'y = ' + str(np.round(slope)) + 'X + ' + str(np.round(intercept)))
@@ -355,7 +515,11 @@ def fit_allcandles_distribution(all_data_60, all_data_120):
     return params60, params120
 
 
+<<<<<<< HEAD
 def filament_finder(good_maxima_df, micron_per_pixel=0.043, min_dist=0.3, max_dist=0.5):
+=======
+def filament_finder(good_maxima_df, micron_per_pixel=0.043, min_dist=0.2, max_dist=0.5):
+>>>>>>> mq_filter_values
     
     # calculate pairwise distance between points
     pairwise_distances = squareform(pdist(good_maxima_df[['crows', 'ccols']]))
@@ -462,3 +626,42 @@ def good_filament_finder(good_maxima_df, imstack, gfp=1731, pad = 5):
     cluster_fig.show()
 
     return good_filament_df
+
+
+def save_filament_properties(good_filament_df, filename):
+    good_filament_df.to_hdf(filename[:-4] + '_data.hd5', key='Filaments', mode='w')
+                           
+    return
+
+
+def save_filament_excel(good_filament_df, filename):
+    # writing to Excel 
+    datatoexcel = pd.ExcelWriter(filename[:-4] + '_data.xlsx') 
+  
+    # write DataFrame to excel 
+    good_filament_df.to_excel(datatoexcel) 
+  
+    # save the excel 
+    datatoexcel.save() 
+    
+    return
+
+def plot_filament_data(good_filament_df, filename):
+    good_filament_df = good_filament_df.astype({"n_maxima":'category'})
+#     ax = sns.boxplot(x="monomers", y="n_maxima", data=good_filament_df, whis=np.inf)
+#     ax = sns.swarmplot(x="monomers", y="n_maxima", data=good_filament_df, color=".2")
+    plt.figure()
+    ax = sns.swarmplot(x=good_filament_df['n_maxima'], y=good_filament_df['monomers'], color='black', alpha=0.5, size = 5)
+    ax = sns.boxplot(x=good_filament_df['n_maxima'], y=good_filament_df['monomers'])
+    
+    return
+
+def plot_all_data(all_filament_data):
+    all_filament_data = all_filament_data.astype({"n_maxima":'category'})
+    plt.figure()
+    ax = sns.swarmplot(x=all_filament_data['n_maxima'], y=all_filament_data['monomers'], color='black', alpha=0.5, size = 5)
+    ax = sns.boxplot(x=all_filament_data['n_maxima'], y=all_filament_data['monomers'])
+        # save the figure
+    fig = ax.get_figure()
+    fig.savefig('all_filament_data.eps', dpi=150)
+    return
