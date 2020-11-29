@@ -515,7 +515,7 @@ def fit_allcandles_distribution(all_data_60, all_data_120):
     return params60, params120
 
 
-def filament_finder(good_maxima_df, micron_per_pixel=0.043, min_dist=0.3, max_dist=0.5):
+def filament_finder(good_maxima_df, micron_per_pixel=0.043, min_dist=0.2, max_dist=0.4):
     
     # calculate pairwise distance between points
     pairwise_distances = squareform(pdist(good_maxima_df[['crows', 'ccols']]))
@@ -556,7 +556,7 @@ def filament_finder(good_maxima_df, micron_per_pixel=0.043, min_dist=0.3, max_di
     return good_maxima_df
 
 
-def good_filament_finder(good_maxima_df, imstack, gfp=1731, pad = 5):
+def good_filament_finder(filename, good_maxima_df, imstack, gfp=1731, pad = 5):
  
     # Group good_maxima_df by the individual filament labels
     unique_filaments = good_maxima_df[good_maxima_df['filament'] != 0.].groupby('filament')
@@ -607,19 +607,63 @@ def good_filament_finder(good_maxima_df, imstack, gfp=1731, pad = 5):
     good_filament_df = good_filament_df[good_filament_df.n_maxima < 5]
     good_filament_df = good_filament_df.reset_index(drop=True)
 
-    # Plot results
+
+    # Plot results color-coded for number of maxima in each structure
     max_projection = np.amax(imstack, axis=0)
-    cluster_fig, cluster_axes = plt.subplots()
-    cluster_axes.imshow(max_projection, cmap='Greys', vmin=50, vmax=800)
+    cluster_maxima_fig, cluster_maxima_axes = plt.subplots(figsize=(6,6))
+    cluster_maxima_axes.imshow(max_projection, cmap='Greys', vmin=50, vmax=1000)
 
     for i, filament in good_filament_df.iterrows():
-        cluster_axes.plot(filament['maxcols'],
+        if filament['n_maxima'] == 2:
+            cluster_maxima_axes.plot(filament['maxcols'],
                           filament['maxrows'],
-                          color='xkcd:lightish blue', marker='o')
-        cluster_axes.plot(filament['bbox'][:, 0],
+                          color='xkcd:french blue', marker='o')
+        elif filament['n_maxima'] == 3:
+            cluster_maxima_axes.plot(filament['maxcols'],
+                          filament['maxrows'],
+                          color='xkcd:amethyst', marker='o')
+        elif filament['n_maxima'] == 4:
+            cluster_maxima_axes.plot(filament['maxcols'],
+                          filament['maxrows'],
+                          color='xkcd:violet red', marker='o')
+        cluster_maxima_axes.plot(filament['bbox'][:, 0],
                           filament['bbox'][:, 1], 
-                          color='xkcd:bright purple')
-    cluster_fig.show()
+                          color='xkcd:very dark blue')
+    cluster_maxima_fig.show()
+    
+    # save the figure
+    cluster_maxima_fig.savefig(filename[:-4] +'_cluster_maxima.eps', dpi=150)
+
+    # Plot results color-coded 'heat map' for number of monomers in each structure
+    max_projection = np.amax(imstack, axis=0)
+    cluster_monomers_fig, cluster_monomers_axes = plt.subplots(figsize=(6,6))
+    cluster_monomers_axes.imshow(max_projection, cmap='Greys', vmin=50, vmax=1000)
+
+    for i, filament in good_filament_df.iterrows():
+        if (filament['monomers'] < 30):
+            cluster_monomers_axes.plot(filament['maxcols'],
+                          filament['maxrows'],
+                          color='xkcd:sunshine yellow', marker='o')
+        elif (filament['monomers'] >= 30 and filament['monomers'] < 60):
+            cluster_monomers_axes.plot(filament['maxcols'],
+                          filament['maxrows'],
+                          color='xkcd:yellowish orange', marker='o')
+        elif (filament['monomers'] >= 60 and filament['monomers'] < 120):
+            cluster_monomers_axes.plot(filament['maxcols'],
+                          filament['maxrows'],
+                          color='xkcd:bright orange', marker='o')
+        elif (filament['monomers'] > 120):
+            cluster_monomers_axes.plot(filament['maxcols'],
+                          filament['maxrows'],
+                          color='xkcd:scarlet', marker='o')
+        cluster_monomers_axes.plot(filament['bbox'][:, 0],
+                          filament['bbox'][:, 1], 
+                          color='xkcd:claret')
+    cluster_monomers_fig.show()
+    
+#     # save the figure
+    cluster_monomers_fig.savefig(filename[:-4] +'_cluster_monomers.eps', dpi=150)
+
 
     return good_filament_df
 
