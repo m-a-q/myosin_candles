@@ -474,9 +474,9 @@ def fit_allcandles_distribution(all_data_60, all_data_120):
     
     # Plot result
     all_distribution_fit_fig, all_distribution_fit_axes = plt.subplots()
-    all_distribution_fit_axes.hist(all_data_60['sum_intensity'].values, bins=150, color="navy")
+    all_distribution_fit_axes.hist(all_data_60['sum_intensity'].values, bins=150, color="xkcd: french blue")
     all_distribution_fit_axes.plot(bins60, bg_fit60, '-k')
-    all_distribution_fit_axes.hist(all_data_120['sum_intensity'].values, bins=150, color="purple")
+    all_distribution_fit_axes.hist(all_data_120['sum_intensity'].values, bins=150, color="xkcd:violet red")
     all_distribution_fit_axes.plot(bins120, bg_fit120, '-k')
 
     all_distribution_fit_axes.set_xlabel('Summed Intensity Candle - Background Subtracted')
@@ -498,7 +498,7 @@ def fit_allcandles_distribution(all_data_60, all_data_120):
     line = slope*x+intercept
 
     candle_calibration_fig, candle_calibration_axes = plt.subplots()
-    candle_calibration_axes.errorbar(x, y, yerr=yerr, fmt='s', ecolor='purple')
+    candle_calibration_axes.errorbar(x, y, yerr=yerr, fmt='s', ecolor='xkcd: amethyst')
     candle_calibration_axes.plot(x, line, 'k')
     candle_calibration_axes.set_title(
         'Candle Calibration\n' + 'y = ' + str(np.round(slope)) + 'X + ' + str(np.round(intercept)))
