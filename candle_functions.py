@@ -514,8 +514,7 @@ def fit_allcandles_distribution(all_data_60, all_data_120):
 
     return params60, params120
 
-def identify_good_maxima(imstack, df, Nobjects, intensity_minimum, 
-                          volume_width=5, z_max = 2500, filename=None):
+def identify_good_maxima(imstack, df, Nobjects, intensity_minimum, volume_width=5, z_max = 2500, filename=None):
 
     # volume width variables
     vw = volume_width
