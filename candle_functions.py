@@ -515,7 +515,7 @@ def fit_allcandles_distribution(all_data_60, all_data_120):
     return params60, params120
 
 
-def filament_finder(good_maxima_df, micron_per_pixel=0.043, min_dist=0.2, max_dist=0.5):
+def filament_finder(good_maxima_df, micron_per_pixel=0.043, min_dist=0.3, max_dist=0.5):
     
     # calculate pairwise distance between points
     pairwise_distances = squareform(pdist(good_maxima_df[['crows', 'ccols']]))
