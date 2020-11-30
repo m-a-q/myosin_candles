@@ -4,7 +4,7 @@ import skimage.io as io
 # %matplotlib notebook
 # This toolbox is to create our plots. Line above makes them interactive
 import matplotlib.pyplot as plt
-# import seaborn as sns              #plotting tool
+import seaborn as sns              #plotting tool
 # This toolbox is a useful directory tool to see what files we have in our folder
 import os
 import cv2                         # image processing toolbox
