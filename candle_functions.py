@@ -569,6 +569,58 @@ def identify_good_maxima(imstack, df, Nobjects, intensity_minimum,
     df['good_intensity'] = good_intensity
     df['bg'] = bg
 
+def identify_good_maxima(imstack, df, Nobjects, intensity_minimum, volume_width=5, z_max = 2500, filename=None):
+    # volume width variables
+    vw = volume_width
+    vwl = volume_width - 1
+    vwr = volume_width + 1
+    z = imstack.shape[0]
+
+    # Create empty holders for parameters
+    good_border = []
+    good_intensity = []
+    bg = []
+
+    max_projection = np.amax(imstack, axis=0)
+    nrows, ncols = max_projection.shape
+
+    # Loop through each candle
+    for maxima in np.arange(0, Nobjects):
+        # Check that the candle isn't on the edge of the image
+        if df.crows[maxima] > vwl and df.crows[maxima] < (nrows - vwr) and df.ccols[maxima] > vwl and df.ccols[maxima] < (ncols - vwr):
+            # select volume around the candle
+            substack = imstack[:, df.crows[maxima]-vw:df.crows[maxima] + vwr,
+                               df.ccols[maxima]-vw:df.ccols[maxima]+vwr]
+
+            # if intensity is above a threshold value mark it as good
+            if np.sum(substack) > intensity_minimum:
+                good_intensity.append(1)
+            else:
+                good_intensity.append(0)
+            # If the edges of the candle volume are below a threshold intensity, mark it as good
+            if (np.sum(substack[0, :, :]) + np.sum(substack[-1, :, :])) < z_max:
+                good_border.append(1)
+            else:
+                good_border.append(0)
+
+            # sum the intensity values from the edge-pixels of the candle volume
+            edge_mean = substack.copy()
+            edge_mean[1:-1, 1:-1, 1:-1] = 0
+            edge_mean = edge_mean.sum()
+            edge_mean = edge_mean / (2*substack.shape[1]*substack.shape[2]
+                                    + 2*(substack.shape[0]-2)*(substack.shape[1])
+                                    + 2*(substack.shape[0]-2)*(substack.shape[2]-2))
+            bg.append(edge_mean * substack.shape[0] * substack.shape[1] * substack.shape[2])
+        else:
+            good_border.append(0)
+            good_intensity.append(0)
+            bg.append(0)
+
+    # Add columns to the dataframe
+    df['good_border'] = good_border
+    df['good_intensity'] = good_intensity
+    df['bg'] = bg
+
 
     # select subset of candles that are marked as good at the border and intensity
     good_maxima_df = df[(df.good_intensity == 1) & (df.good_border == 1)]
@@ -577,9 +629,9 @@ def identify_good_maxima(imstack, df, Nobjects, intensity_minimum,
 
     # plot where the good candles are in the image
     good_overlay_fig, good_overlay_axes = plt.subplots()
-    good_overlay_axes.imshow(max_projection, cmap='Greys', vmin=50, vmax=1000)
+    good_overlay_axes.imshow(max_projection, cmap='Greys', vmin=50, vmax=800)
     good_overlay_axes.plot(
-        good_maxima_df.ccols, good_maxima_df.crows, 'x', color='xkcd:jungle green')
+        good_maxima_df.ccols, good_maxima_df.crows, 'x', color='xkcd:bright purple')
     good_overlay_fig.show()
 
     # plot histogram of intensities
@@ -602,7 +654,8 @@ def identify_good_maxima(imstack, df, Nobjects, intensity_minimum,
 
     return good_maxima_df
 
-def filament_finder(good_maxima_df, micron_per_pixel=0.043, min_dist=0.2, max_dist=0.4):
+
+def filament_finder(good_maxima_df, micron_per_pixel=0.043, min_dist=0.2, max_dist=0.5):
     
     # calculate pairwise distance between points
     pairwise_distances = squareform(pdist(good_maxima_df[['crows', 'ccols']]))
