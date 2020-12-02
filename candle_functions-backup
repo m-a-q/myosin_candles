@@ -1,3 +1,5 @@
+
+
 import numpy as np                 # This contains all our math functions we'll need
 # This toolbox is what we'll use for reading and writing images
 import skimage.io as io
@@ -5,7 +7,6 @@ import skimage.io as io
 # This toolbox is to create our plots. Line above makes them interactive
 import matplotlib.pyplot as plt
 import seaborn as sns              #plotting tool
-import matplotlib.ticker as ticker
 # This toolbox is a useful directory tool to see what files we have in our folder
 import os
 import cv2                         # image processing toolbox
@@ -127,7 +128,7 @@ def find_candles(max_projection, min_value=1000):
     # Plot results
     overlay_fig, overlay_axes = plt.subplots()
     overlay_axes.imshow(max_projection, cmap='Greys', vmin=50, vmax=np.max(max_projection)*.4)
-    overlay_axes.plot(peak_coords[:, 1], peak_coords[:, 0], 'x', color='xkcd:scarlet')
+    overlay_axes.plot(peak_coords[:, 1], peak_coords[:, 0], 'xr')
     overlay_fig.show()
 
     return df, Nobjects
@@ -201,7 +202,7 @@ def save_prefilter_candle_data(df, filename):
     return
 
 
-def fit_all_prefilter_distribution(all_prefilter_data_60, all_prefilter_data_120, experiment_date):
+def fit_all_prefilter_distribution(all_prefilter_data_60, all_prefilter_data_120):
     
     # make a histogram of the intensities for the sum intensity of z faces or xy faces
     counts60z, bins60z = np.histogram(all_prefilter_data_60['z_bg'].values, bins=150)
@@ -256,11 +257,10 @@ def fit_all_prefilter_distribution(all_prefilter_data_60, all_prefilter_data_120
     
     # Plot result
     all_prefilter_z_distribution_fit_fig, all_prefilter_z_distribution_fit_axes = plt.subplots()
-    all_prefilter_z_distribution_fit_axes.hist(all_prefilter_data_60['z_bg'].values, bins=150, color='xkcd:light navy')
-    all_prefilter_z_distribution_fit_axes.plot(bins60z, prefilter_bg_fit60z, '-k')
-    all_prefilter_z_distribution_fit_axes.hist(all_prefilter_data_120['z_bg'].values, bins=150, color='xkcd:violet red')
+    all_prefilter_z_distribution_fit_axes.hist(all_prefilter_data_120['z_bg'].values, bins=150, color="purple")
     all_prefilter_z_distribution_fit_axes.plot(bins120z, prefilter_bg_fit120z, '-k')
-
+    all_prefilter_z_distribution_fit_axes.hist(all_prefilter_data_60['z_bg'].values, bins=150, color="navy")
+    all_prefilter_z_distribution_fit_axes.plot(bins60z, prefilter_bg_fit60z, '-k')
 
     
     all_prefilter_z_distribution_fit_axes.set_xlabel('Summed Intensity of Z faces')
@@ -271,13 +271,13 @@ def fit_all_prefilter_distribution(all_prefilter_data_60, all_prefilter_data_120
     # transform=all_distribution_fit_axes.transAxes, fontsize=10)
     all_prefilter_z_distribution_fit_fig.show()
     # save the figure
-    all_prefilter_z_distribution_fit_fig.savefig(experiment_date + '_all_prefilter_z_data_histograms.eps', dpi=150)
+    all_prefilter_z_distribution_fit_fig.savefig('all_prefilter_z_data_histograms.eps', dpi=150)
         
     all_prefilter_xy_distribution_fit_fig, all_prefilter_xy_distribution_fit_axes = plt.subplots()
-    all_prefilter_xy_distribution_fit_axes.hist(all_prefilter_data_60['xy_bg'].values, bins=150, color='xkcd:light navy')
-    all_prefilter_xy_distribution_fit_axes.plot(bins60xy, prefilter_bg_fit60xy, '-k')
-    all_prefilter_xy_distribution_fit_axes.hist(all_prefilter_data_120['xy_bg'].values, bins=150, color='xkcd:violet red')
+    all_prefilter_xy_distribution_fit_axes.hist(all_prefilter_data_120['xy_bg'].values, bins=150, color="purple")
     all_prefilter_xy_distribution_fit_axes.plot(bins120xy, prefilter_bg_fit120xy, '-k')
+    all_prefilter_xy_distribution_fit_axes.hist(all_prefilter_data_60['xy_bg'].values, bins=150, color="navy")
+    all_prefilter_xy_distribution_fit_axes.plot(bins60xy, prefilter_bg_fit60xy, '-k')
 
     
     all_prefilter_xy_distribution_fit_axes.set_xlabel('Summed Intensity of XY faces')
@@ -288,12 +288,13 @@ def fit_all_prefilter_distribution(all_prefilter_data_60, all_prefilter_data_120
     # transform=all_distribution_fit_axes.transAxes, fontsize=10)
     all_prefilter_xy_distribution_fit_fig.show()
     # save the figure
-    all_prefilter_xy_distribution_fit_fig.savefig(experiment_date + '_all_prefilter_xy_data_histograms.eps', dpi=150)
+    all_prefilter_xy_distribution_fit_fig.savefig('all_prefilter_xy_data_histograms.eps', dpi=150)
     
-    return prefilter_params60z, prefilter_params120z,  prefilter_params60xy, prefilter_params120xy               
+    return prefilter_params60z, prefilter_params120z,  prefilter_params60xy, prefilter_params120xy 
+              
 
 def identify_good_candles(imstack, df, Nobjects, intensity_minimum, 
-                          z_max, xy_max, volume_width=5, filename=None):
+                          volume_width=5, z_max = 2500, xy_max = 5000, filename=None):
 
     # volume width variables
     vw = volume_width
@@ -357,7 +358,7 @@ def identify_good_candles(imstack, df, Nobjects, intensity_minimum,
     good_overlay_fig, good_overlay_axes = plt.subplots()
     good_overlay_axes.imshow(max_projection, cmap='Greys', vmin=50, vmax=np.max(max_projection)*.4)
     good_overlay_axes.plot(
-        good_candles_df.ccols, good_candles_df.crows, 'x', color='xkcd:jungle green')
+        good_candles_df.ccols, good_candles_df.crows, 'x', color='xkcd:bright purple')
     good_overlay_fig.show()
 
     # plot histogram of intensities
@@ -436,7 +437,7 @@ def save_candle_properties(good_candles_df, filename):
     return
                            
 
-def fit_allcandles_distribution(all_data_60, all_data_120, experiment_date):
+def fit_allcandles_distribution(all_data_60, all_data_120):
     # make a histogram of the intensities
 #     bg_subtract_intensity_60 = all_data_60['sum_intensity'].values - all_data_60['bg'].values
 #     bg_subtract_intensity_120 = all_data_120['sum_intensity'].values - all_data_120['bg'].values
@@ -475,9 +476,9 @@ def fit_allcandles_distribution(all_data_60, all_data_120, experiment_date):
     
     # Plot result
     all_distribution_fit_fig, all_distribution_fit_axes = plt.subplots()
-    all_distribution_fit_axes.hist(all_data_60['sum_intensity'].values, bins=150, color='xkcd:light navy')
+    all_distribution_fit_axes.hist(all_data_60['sum_intensity'].values, bins=150, color="navy")
     all_distribution_fit_axes.plot(bins60, bg_fit60, '-k')
-    all_distribution_fit_axes.hist(all_data_120['sum_intensity'].values, bins=150, color='xkcd:violet red')
+    all_distribution_fit_axes.hist(all_data_120['sum_intensity'].values, bins=150, color="purple")
     all_distribution_fit_axes.plot(bins120, bg_fit120, '-k')
 
     all_distribution_fit_axes.set_xlabel('Summed Intensity Candle - Background Subtracted')
@@ -488,7 +489,7 @@ def fit_allcandles_distribution(all_data_60, all_data_120, experiment_date):
     # transform=all_distribution_fit_axes.transAxes, fontsize=10)
     all_distribution_fit_fig.show()
     # save the figure
-    all_distribution_fit_fig.savefig(experiment_date + '_all_candle_histograms.eps', dpi=150)
+    all_distribution_fit_fig.savefig('all_data_histograms.eps', dpi=150)
 
     x = np.array([0, 60, 120])
     y = np.array([0, params60[1], params120[1]])
@@ -499,7 +500,7 @@ def fit_allcandles_distribution(all_data_60, all_data_120, experiment_date):
     line = slope*x+intercept
 
     candle_calibration_fig, candle_calibration_axes = plt.subplots()
-    candle_calibration_axes.errorbar(x, y, yerr=yerr, fmt='s', ecolor='xkcd:darkish purple')
+    candle_calibration_axes.errorbar(x, y, yerr=yerr, fmt='s', ecolor='purple')
     candle_calibration_axes.plot(x, line, 'k')
     candle_calibration_axes.set_title(
         'Candle Calibration\n' + 'y = ' + str(np.round(slope)) + 'X + ' + str(np.round(intercept)))
@@ -511,10 +512,10 @@ def fit_allcandles_distribution(all_data_60, all_data_120, experiment_date):
     candle_calibration_fig.show()
 
     # save the figure
-    candle_calibration_fig.savefig(experiment_date + '_all_candle_calibration.eps', dpi=150)
+    candle_calibration_fig.savefig('all_data_calibration.eps', dpi=150)
 
     return params60, params120
-    
+
 def identify_good_maxima(imstack, df, Nobjects, intensity_minimum, 
                           volume_width=5, z_max = 2500, filename=None):
 
@@ -577,9 +578,9 @@ def identify_good_maxima(imstack, df, Nobjects, intensity_minimum,
 
     # plot where the good candles are in the image
     good_overlay_fig, good_overlay_axes = plt.subplots()
-    good_overlay_axes.imshow(max_projection, cmap='Greys', vmin=50, vmax=1000)
+    good_overlay_axes.imshow(max_projection, cmap='Greys', vmin=50, vmax=800)
     good_overlay_axes.plot(
-        good_maxima_df.ccols, good_maxima_df.crows, 'x', color='xkcd:jungle green')
+        good_maxima_df.ccols, good_maxima_df.crows, 'x', color='xkcd:bright purple')
     good_overlay_fig.show()
 
     # plot histogram of intensities
@@ -602,7 +603,8 @@ def identify_good_maxima(imstack, df, Nobjects, intensity_minimum,
 
     return good_maxima_df
 
-def filament_finder(good_maxima_df, micron_per_pixel=0.043, min_dist=0.2, max_dist=0.4):
+
+def filament_finder(good_maxima_df, micron_per_pixel=0.043, min_dist=0.2, max_dist=0.5):
     
     # calculate pairwise distance between points
     pairwise_distances = squareform(pdist(good_maxima_df[['crows', 'ccols']]))
@@ -694,8 +696,7 @@ def good_filament_finder(filename, good_maxima_df, imstack, gfp=1731, pad = 5):
     good_filament_df = good_filament_df[good_filament_df.n_maxima < 5]
     good_filament_df = good_filament_df.reset_index(drop=True)
 
-
-    # Plot results color-coded for number of maxima in each structure
+    # Plot results
     max_projection = np.amax(imstack, axis=0)
     cluster_maxima_fig, cluster_maxima_axes = plt.subplots(figsize=(6,6))
     cluster_maxima_axes.imshow(max_projection, cmap='Greys', vmin=50, vmax=1000)
@@ -716,12 +717,12 @@ def good_filament_finder(filename, good_maxima_df, imstack, gfp=1731, pad = 5):
         cluster_maxima_axes.plot(filament['bbox'][:, 0],
                           filament['bbox'][:, 1], 
                           color='xkcd:very dark blue')
-#     cluster_maxima_fig.show()
+    cluster_maxima_fig.show()
     
     # save the figure
     cluster_maxima_fig.savefig(filename[:-4] +'_cluster_maxima.eps', dpi=150)
 
-    # Plot results color-coded 'heat map' for number of monomers in each structure
+        # Plot results
     max_projection = np.amax(imstack, axis=0)
     cluster_monomers_fig, cluster_monomers_axes = plt.subplots(figsize=(6,6))
     cluster_monomers_axes.imshow(max_projection, cmap='Greys', vmin=50, vmax=1000)
@@ -746,11 +747,11 @@ def good_filament_finder(filename, good_maxima_df, imstack, gfp=1731, pad = 5):
         cluster_monomers_axes.plot(filament['bbox'][:, 0],
                           filament['bbox'][:, 1], 
                           color='xkcd:claret')
-#     cluster_monomers_fig.show()
+    cluster_monomers_fig.show()
     
 #     # save the figure
     cluster_monomers_fig.savefig(filename[:-4] +'_cluster_monomers.eps', dpi=150)
-
+    cluster_fig.show()
 
     return good_filament_df
 
@@ -778,28 +779,17 @@ def plot_filament_data(good_filament_df, filename):
 #     ax = sns.boxplot(x="monomers", y="n_maxima", data=good_filament_df, whis=np.inf)
 #     ax = sns.swarmplot(x="monomers", y="n_maxima", data=good_filament_df, color=".2")
     plt.figure()
-    ax = sns.swarmplot(x=good_filament_df['n_maxima'], y=good_filament_df['monomers'], color='black', edgecolor="gray", alpha = 0.5, size = 5)
-    ax = sns.boxplot(x=good_filament_df['n_maxima'], y=good_filament_df['monomers'], palette = "cool", showfliers = False)
+    ax = sns.swarmplot(x=good_filament_df['n_maxima'], y=good_filament_df['monomers'], color='black', alpha=0.5, size = 5)
+    ax = sns.boxplot(x=good_filament_df['n_maxima'], y=good_filament_df['monomers'])
     
     return
 
-def save_all_filament_properties(all_filament_data, experiment_date):
-    all_filament_data.to_hdf(experiment_date + '_all_filament_data.hd5', key='Filaments', mode='w')
-                           
-    return
-
-
-
-def plot_all_data(all_filament_data, experiment_date):
+def plot_all_data(all_filament_data):
     all_filament_data = all_filament_data.astype({"n_maxima":'category'})
-    sns.set(rc={'figure.figsize':(7,7)})
     plt.figure()
-    ax = sns.swarmplot(x=all_filament_data['n_maxima'], y=all_filament_data['monomers'], color='black', edgecolor="gray", alpha = 0.5, size = 5)
-    ax = sns.boxplot(x=all_filament_data['n_maxima'], y=all_filament_data['monomers'], palette = "cool", showfliers = False)
-    ax.set(xlabel='Number of Maxima', ylabel='Monomers')
-    ax.yaxis.set_major_locator(ticker.MultipleLocator(30))
-    ax.yaxis.set_major_formatter(ticker.ScalarFormatter())
-    # save the figure
+    ax = sns.swarmplot(x=all_filament_data['n_maxima'], y=all_filament_data['monomers'], color='black', alpha=0.5, size = 5)
+    ax = sns.boxplot(x=all_filament_data['n_maxima'], y=all_filament_data['monomers'])
+        # save the figure
     fig = ax.get_figure()
-    fig.savefig(experiment_date + 'all_filament_data.eps', dpi=150)
+    fig.savefig('all_filament_data.eps', dpi=150)
     return
