@@ -856,3 +856,25 @@ def plot_all_data(all_filament_data, experiment_date):
     fig = ax.get_figure()
     fig.savefig(experiment_date + 'all_filament_data.png', dpi=150)
     return
+
+def save_all_experiment_properties(all_experiment_data):
+    all_experiment_data.to_hdf('all_experiment_data.hd5', key='Filaments', mode='w')
+                           
+    return
+
+def plot_all_experiments(all_experiment_data):
+    all_experiment_data = all_experiment_data.astype({"n_maxima":'category'})
+#     sns.set(rc={'figure.figsize':(10,7)})
+    sns.set_context("talk", font_scale=1)
+    plt.figure(figsize=(10,7))
+    ax = sns.swarmplot(x=all_experiment_data['n_maxima'], y=all_experiment_data['monomers'], hue=all_experiment_data['date'], dodge=True, palette = "gray_r", edgecolor="gray", alpha = 0.5, size = 5)
+    ax = sns.boxplot(x=all_experiment_data['n_maxima'], y=all_experiment_data['monomers'], hue=all_experiment_data['date'], dodge=True,palette = "ocean_r", showfliers = False)
+    ax.legend(bbox_to_anchor=(1.01, 1),borderaxespad=0)
+    plt.tight_layout()
+    ax.set(xlabel='Number of Maxima', ylabel='Monomers')
+    ax.yaxis.set_major_locator(ticker.MultipleLocator(30))
+    ax.yaxis.set_major_formatter(ticker.ScalarFormatter())
+    # save the figure
+    fig = ax.get_figure()
+    fig.savefig('all_experiment_data.png', dpi=150)
+    return
