@@ -854,5 +854,5 @@ def plot_all_data(all_filament_data, experiment_date):
     ax.yaxis.set_major_formatter(ticker.ScalarFormatter())
     # save the figure
     fig = ax.get_figure()
-    fig.savefig(experiment_date + 'all_filament_data.eps', dpi=150)
+    fig.savefig(experiment_date + 'all_filament_data.png', dpi=150)
     return
