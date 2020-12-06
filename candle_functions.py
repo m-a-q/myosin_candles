@@ -655,7 +655,7 @@ def identify_good_maxima(imstack, df, Nobjects, intensity_minimum, volume_width=
     return good_maxima_df
 
 
-def filament_finder(good_maxima_df, micron_per_pixel=0.043, min_dist=0.2, max_dist=0.5):
+def filament_finder(good_maxima_df, micron_per_pixel=0.043, min_dist=0.2, max_dist=0.4):
     
     # calculate pairwise distance between points
     pairwise_distances = squareform(pdist(good_maxima_df[['crows', 'ccols']]))
