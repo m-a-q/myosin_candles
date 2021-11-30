@@ -234,9 +234,15 @@ def find_good_particles(t1_sort, imstack_max, bbox_pad=17):
     for c in range(len(particles_df)):
         cluster_id = particles_df.cluster_id[c]
         frame_test = t1_sort.loc[t1_sort['particle'] == cluster_id].reset_index()
-        if frame_test.frame[0]>10 and int(frame_test.y[0]) > vwl and int(frame_test.y[0]) < (nrows - vwr) and int(frame_test.x[0]) > vwl and int(frame_test.x[0]) < (ncols - vwr)\
-        and int(frame_test.y[frame_test.index[-1]]) > vwl and int(frame_test.y[frame_test.index[-1]]) < (nrows - vwr) and int(frame_test.x[frame_test.index[-1]]) > vwl and int(frame_test.x[frame_test.index[-1]]) < (ncols - vwr):
-    #     if frame_test.frame[0]>10:
+        if frame_test.frame[0]>10\
+        and int(frame_test.y[0]) > vwl\
+        and int(frame_test.y[0]) < (nrows - vwr)\
+        and int(frame_test.x[0]) > vwl\
+        and int(frame_test.x[0]) < (ncols - vwr)\
+        and int(frame_test.y[frame_test.index[-1]]) > vwl\
+        and int(frame_test.y[frame_test.index[-1]]) < (nrows - vwr)\
+        and int(frame_test.x[frame_test.index[-1]]) > vwl\
+        and int(frame_test.x[frame_test.index[-1]]) < (ncols - vwr):
             good_particles_list.append(cluster_id)
 
     print(len(good_particles_list))
@@ -281,7 +287,12 @@ def find_picked_particles(manual_csv_filename, t1_sort, imstack_max, bbox_pad=17
 (all of the piels in the bounding box that will measure myosin intensity) in the ten frames
 before the myosin particle appears. Then it takes all of those frame+particle specific bg measurements
 and determines the distributions of those measurements to then take about the 95% cofidence interval as the bg_threshold'''
-def find_myo_bg_threshold(picked_particles_list, t1_sort, imstack_max, imstack_sum, bbox_pad = 17,show_results=True):
+def find_myo_bg_threshold(picked_particles_list,
+                          t1_sort,
+                          imstack_max,
+                          imstack_sum,
+                          bbox_pad = 17,
+                          show_results=True):
     all_particle_bg = []
     
     for cid in range(len(picked_particles_list)):

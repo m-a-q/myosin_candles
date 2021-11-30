@@ -46,7 +46,13 @@ def get_czifile_metadata(filename):
     # read the metadata from the czifile
     metadata_xml = czi.metadata()
     # convert the metadata to an easily parsible structure
-    XML_data = untangle.parse(metadata_xml)
+    try:
+        XML_data = untangle.parse(metadata_xml)
+    except ValueError:
+        with open('temp.xml','w') as f:
+            f.write(metadata_xml)
+        XML_data=untangle.parse('temp.xml')
+        os.remove('temp.xml')
     # pull the image data for number of rows, columns, planes, channels, timepoints
     N_rows = int(XML_data.ImageDocument.Metadata.Information.Image.SizeY.cdata)
     N_cols = int(XML_data.ImageDocument.Metadata.Information.Image.SizeX.cdata)
