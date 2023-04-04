@@ -740,8 +740,8 @@ def fit_allcandles_distribution_act(all_data_act, all_data_60, all_data_120, exp
 
     
     # Plot result
-    all_distribution_fit_fig, all_distribution_fit_axes = plt.subplots(figsize=(6,4))
-    all_distribution_fit_axes.hist(all_data_120['bg_sub_intensity'].values, bins=150, color='#270563')
+    all_distribution_fit_fig, all_distribution_fit_axes = plt.subplots(figsize=(15,10))
+    all_distribution_fit_axes.hist(all_data_120['bg_sub_intensity'].values, bins=150, color='#270563', )
     all_distribution_fit_axes.plot(bins120, bg_fit120, '-k')
     all_distribution_fit_axes.hist(all_data_60['bg_sub_intensity'].values, bins=150, color='#067d54')
     all_distribution_fit_axes.plot(bins60, bg_fit60, '-k')
@@ -749,6 +749,14 @@ def fit_allcandles_distribution_act(all_data_act, all_data_60, all_data_120, exp
     all_distribution_fit_axes.plot(binsact, bg_fitact, '-k')
     all_distribution_fit_axes.hist(all_data_120['bg_sub_intensity'].values, bins=150, color='#270563')
     all_distribution_fit_axes.plot(bins120, bg_fit120, '-k')
+    plt.xlim(-100,500000)
+    
+    
+    act_distribution_fit_fig, act_distribution_fit_axes = plt.subplots(figsize=(6,4))
+    act_distribution_fit_axes.hist(all_data_act['bg_sub_intensity'].values, bins=150, color='#d6cd0a')
+    act_distribution_fit_axes.plot(binsact, bg_fitact, '-k')
+    plt.xlim(0,10000)
+    plt.ylim(0,10)
 
     all_distribution_fit_axes.set_xlabel('Summed Intensity Candle - Background Subtracted')
     all_distribution_fit_axes.set_ylabel('Counts')
