@@ -1,9 +1,6 @@
 import numpy as np                 # This contains all our math functions we'll need
-# This toolbox is what we'll use for reading and writing images
-import skimage.io as io
-# %matplotlib notebook
-# This toolbox is to create our plots. Line above makes them interactive
-import matplotlib.pyplot as plt
+import skimage.io as io # This toolbox is what we'll use for reading and writing images
+import matplotlib.pyplot as plt # This toolbox is to create our plots.
 import matplotlib.patches as patches #for plotting rectanglular bounding box over features in images
 import seaborn as sns              #plotting tool
 import matplotlib.ticker as ticker
@@ -98,6 +95,9 @@ def get_czifile_metadata(filename):
     return exp_details
 
 def prep_file(filename, show_results=False):
+    '''
+    Reading in the file, reducing the dimensions to just XYZ, creating max projections and reading the metadata. 
+    '''
     # read in the file
     imstack = czifile.imread(filename)
 
@@ -118,6 +118,10 @@ def prep_file(filename, show_results=False):
     return imstack, max_projection, exp_details
 
 def candle_masks(imstack, show_results=False):
+    '''
+    Creating a mask in the images of cells expressing the candles so that you are isolating the cytoplasm
+    '''
+
     im_sum = np.sum(imstack, axis=0)
     intensity_values = np.unique(im_sum.ravel())
     # reduce list of intensity values down to something manageable to speed up computation
@@ -137,7 +141,7 @@ def candle_masks(imstack, show_results=False):
     # find the maximum value of the intensity_difference and set it equal to the threshold
     max_intensity = np.argwhere(intensity_difference == np.max(intensity_difference))
     threshold = intensity_values[max_intensity[0][0]]
-#     print(threshold)
+
     # make a mask at this threshold
     mask = im_sum > threshold * (2 / 3)
     small_object_size = 11 * 11
@@ -147,8 +151,10 @@ def candle_masks(imstack, show_results=False):
     labeled_mask = label(mask)
     props = regionprops(labeled_mask)
     areas = []
+    #find the largest region
     for region in props:
         areas.append(region.area)
+    #make a new mask of the largest region and make it filled
     max_area_label = np.argwhere(areas == np.max(areas))
     cytoplasm_mask = labeled_mask == max_area_label[0][0] + 1
     SE = disk(5)
@@ -156,6 +162,7 @@ def candle_masks(imstack, show_results=False):
     cell_mask = binary_fill_holes(cytoplasm_mask)
     extracellular_mask = cell_mask == False
     nuclear_mask = (cytoplasm_mask == False) * cell_mask
+    #showing what the masks look like so you can adjust the parameters if needed
     if show_results:
         mask_fig, mask_ax = plt.subplots(nrows=2, ncols=2)
         mask_ax[0,0].imshow(cell_mask)
@@ -169,17 +176,20 @@ def candle_masks(imstack, show_results=False):
         for ax in mask_ax.ravel():
             ax.axis('off')
         mask_fig.show()
-        
+    #calculating the background    
     counts, bins = np.histogram(im_sum[cytoplasm_mask], bins=150)
     bins = bins[:-1] + np.diff(bins/2)
     hist_max = np.argwhere(counts == np.max(counts))
     bg_pixel = bins[hist_max[0, 0]]
-    print(bg_pixel)
+    # print(bg_pixel)
     
     return cell_mask, cytoplasm_mask, extracellular_mask, nuclear_mask, bg_pixel
 
 def find_candles(max_projection, cell_mask, show_results=False, min_value=1000):
-
+    '''
+    Identifying the local peaks in the image and then plotting them
+    '''
+    
     # Function returns local maxim
     peak_coords = peak_local_max(max_projection,
                                  min_distance=3,
@@ -221,7 +231,10 @@ def find_candles(max_projection, cell_mask, show_results=False, min_value=1000):
 
 
 def find_filter_values(imstack, df, Nobjects, bg_pixel, volume_width=5):
-    
+    '''
+    Measuring the intensity of the boundaries around the local peak to get the sum of the background intensity of those boundaries
+    '''
+        
     # volume width variables
     vw = volume_width
     vwl = volume_width - 1
@@ -287,7 +300,10 @@ def save_prefilter_candle_data(df, filename):
 
 
 def fit_all_prefilter_distribution_act(all_prefilter_data_act, experiment_date, save_results=False):
-    
+    '''
+    Plotting the intensities of the 
+    '''
+        
     # make a histogram of the intensities for the sum intensity of z faces or xy faces
     all_prefilter_data_act= all_prefilter_data_act[all_prefilter_data_act['z_bg'].values >0]
     countsactz, binsactz = np.histogram(all_prefilter_data_act['z_bg'].values, bins=150)
