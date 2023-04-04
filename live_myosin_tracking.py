@@ -1,4 +1,3 @@
-
 import numpy as np                 # This contains all our math functions we'll need
 # This toolbox is what we'll use for reading and writing images
 import skimage.io as io
@@ -722,4 +721,3 @@ def plot_all_experiments(all_experiment_data):
     fig.savefig('all_experiment_data.eps', dpi=150)
     
     return
-
