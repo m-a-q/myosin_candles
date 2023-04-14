@@ -52,7 +52,13 @@ def get_czifile_metadata(filename):
     # read the metadata from the czifile
     metadata_xml = czi.metadata()
     # convert the metadata to an easily parsible structure
-    XML_data = untangle.parse(metadata_xml)
+    try:
+        XML_data = untangle.parse(metadata_xml)
+    except ValueError:
+        with open('temp.xml','w') as f:
+            f.write(metadata_xml)
+        XML_data=untangle.parse('temp.xml')
+        os.remove('temp.xml')
     # pull the image data for number of rows, columns, planes, channels, timepoints
     N_rows = int(XML_data.ImageDocument.Metadata.Information.Image.SizeY.cdata)
     N_cols = int(XML_data.ImageDocument.Metadata.Information.Image.SizeX.cdata)
@@ -98,6 +104,9 @@ def get_czifile_metadata(filename):
     return exp_details
 
 def prep_file_zproject(czifilename):
+    '''
+    Reading in the file, reducing the dimensions to just XYZ, creating max projections and reading the metadata. 
+    '''
     # read in the file
     imstack = czifile.imread(czifilename)
 
@@ -116,9 +125,6 @@ def prep_file_zproject(czifilename):
     # get the metadata
     exp_details = get_czifile_metadata(czifilename)
 
-#     max_projection_fig, max_projection_axes = plt.subplots()
-#     max_projection_axes.imshow(max_projection, cmap='Greys', vmin=50, vmax=np.max(max_projection)*.4)
-#     max_projection_fig.show()
 
     return imstack, imstack_max, imstack_sum, exp_details
 
@@ -211,9 +217,11 @@ def track_particles(features, img_example,qbk_cmap, tp_search_range = 5, tp_min_
     return t1_sort
 
 
-'''This cell is making a dataframe with a list of the unique particle ids to loop through and identify peaks etc on individual particle tracks. I also needed to add some filters before I process individual particles.
-I want to make sure that the particles (tracked myosin clusters) are appearing after ten frames because I am using the previous ten frames before appearance to calculate background intensity. 
-I also want to make sure that the tracked particle never touches the edges of the imaging area (checking the first and last frame of appearance is sufficient for this).'''
+'''This is making a dataframe with a list of the unique particle ids to loop through and identify peaks etc on individual particle tracks. 
+I also needed to add some filters before I process individual particles. I want to make sure that the particles (tracked myosin clusters) 
+are appearing after ten frames because I am using the previous ten frames before appearance to calculate background intensity. 
+I also want to make sure that the tracked particle never touches the edges of the imaging area 
+(checking the first and last frame of appearance is sufficient for this).'''
 
 def find_good_particles(t1_sort, imstack_max, bbox_pad=17):
 
@@ -284,9 +292,9 @@ def find_picked_particles(manual_csv_filename, t1_sort, imstack_max, bbox_pad=17
     return picked_particles_list
 
 '''Loops through every particle in the picked particle list and gets the sum bg value
-(all of the piels in the bounding box that will measure myosin intensity) in the ten frames
-before the myosin particle appears. Then it takes all of those frame+particle specific bg measurements
-and determines the distributions of those measurements to then take about the 95% cofidence interval as the bg_threshold'''
+(all of the pixels in the bounding box that will measure myosin intensity) in the ten frames before the myosin particle appears. 
+Then it takes all of those frame+particle specific bg measurementsand determines the distributions of those measurements to 
+then take about the 95% cofidence interval as the bg_threshold'''
 def find_myo_bg_threshold(picked_particles_list,
                           t1_sort,
                           imstack_max,
