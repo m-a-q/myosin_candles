@@ -1,7 +1,7 @@
 # myosin_candles
 Analysis for quantifying the number myosin monomers in structures using a standard curve of fluorescence. 
 
-This work was published as:
+This work was published as:<br>
 Local Monomer Levels and Established Filaments Potentiate Non-Muscle Myosin 2 Assembly
 Quintanilla MA, Patel H, Wu H, Sochacki KA, Chandrasekar S, Akamatsu M, Rotty JD, Korobova F, Bear JE, Taraska JW, Oakes PW✉, Beach JR✉<br>
 J Cell Biol 223(4):e202305023 (2024)<br>
